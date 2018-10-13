@@ -1,0 +1,2 @@
+model_checkpoint_path: "/home/andrewyli/one-shot-segmentation/cluttered-omniglot/logs/siamese-u-net/4_characters/Run.ckpt"
+all_model_checkpoint_paths: "/home/andrewyli/one-shot-segmentation/cluttered-omniglot/logs/siamese-u-net/4_characters/Run.ckpt"

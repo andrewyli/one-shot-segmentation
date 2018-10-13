@@ -1,3 +1,4 @@
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -102,3 +103,14 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+*.png
+*.pyc
+*.npy
+*.pickle
+*~
+./cluttered_omniglot/*
+cluttered_omniglot
+cluttered_omniglot/*
+
+
