@@ -21,10 +21,12 @@ config["DATASET_DIR"] = os.path.join(
 )
 
 config["NUM_FOLDS"] = 1
-config["NUM_CHARS"] = 10
+config["NUM_CHARS"] = 4
 config["TRAIN_SIZE"] = 2000000
 config["TEST_SIZE"] = 10000
-config["NUM_OCCLUDERS"] = 2
+config["NUM_OCCLUDERS"] = 0
+config["BLOCK_SIZE"] = 250
+config["STORE_AS_BLOCK"] = True
 
 checksums = {4: [b'\x8c\x99\x9e\\J\x9a\x811g.eB\xa0\xb3\xf2f',
                  b';\xf8\x05\xb2vk#!\xf9\xad\xb9\x88\xd1\n\x0f\xba',
@@ -97,7 +99,7 @@ def generate_fold(num_chars, train_size, test_size):
     # get character sets
     chars_train, chars_eval, chars_test = load_chars()
 
-    num_distractors = num_chars - 1
+    num_distractors = num_chars - 1 - config["NUM_OCCLUDERS"]
     # Set and print saving directory
     dset_dir = os.path.join(
         config["DATASET_DIR"],
@@ -120,6 +122,8 @@ def generate_fold(num_chars, train_size, test_size):
     # Set number of distractors
     generator_config.DISTRACTORS = num_distractors
     generator_config.OCCLUDERS = config["NUM_OCCLUDERS"]
+    generator_config.BLOCK_SIZE = config["BLOCK_SIZE"]
+    generator_config.STORE_AS_BLOCK = config["STORE_AS_BLOCK"]
 
     ### Generate training set ###
 

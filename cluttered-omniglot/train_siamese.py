@@ -6,7 +6,7 @@ DATASET_DIR = os.path.join(
     "/nfs/diskstation/projects/dex-net/segmentation/datasets/",
     'cluttered_omniglot/'
 )
-FOLD_NUM = 2
+FOLD_NUM = 5
 TRAIN_SIZE = 2000000
 VAL_SIZE = 10000
 TEST_SIZE = 10000

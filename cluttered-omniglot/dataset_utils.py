@@ -48,7 +48,9 @@ class DatasetGeneratorConfig():
 
     # Batch size
     BATCH_SIZE = 250
-    STORE_AS_BATCH = False
+
+    BLOCK_SIZE = 250
+    STORE_AS_BLOCK = True
 
     def set_drawer_split(self):
 
@@ -148,7 +150,7 @@ def color_char(tmp_im):
 ### Define Image Generation Functions
 
 # Generate one image with clutter
-def make_cluttered_image(chars, char, n_distractors, config, verbose=0):
+def make_cluttered_image(chars, char, n_distractors, n_occluders, config, verbose=0):
     '''Inputs:
     chars: Dataset of characters
     char: target character
@@ -218,7 +220,7 @@ def make_cluttered_image(chars, char, n_distractors, config, verbose=0):
 
         # generate occlusion
         j = 0
-        while j < config.OCCLUDERS:
+        while j < n_occluders:
             # draw random character
             rnd_char = np.random.randint(0,len(chars))
             rnd_ind = np.random.randint(config.LOW_INSTANCE,config.HIGH_INSTANCE)
@@ -318,8 +320,10 @@ def make_image(chars,
     # choose random number of distractors for datasets with varying clutter
     # selects the one fixed number of distractors in other cases
     n_distractors = np.random.choice([config.DISTRACTORS])
+    n_occluders = np.random.choice([config.OCCLUDERS])
+
     #generate images and segmentation masks
-    ims, seg = make_cluttered_image(chars, char, n_distractors, config)
+    ims, seg = make_cluttered_image(chars, char, n_distractors, n_occluders, config)
 
     #generate targets
     tar = make_target(chars, char, config)
@@ -335,11 +339,11 @@ def make_batch(chars,
                config,
                seed=None):
 
-    r_ims = np.zeros((config.BATCH_SIZE, config.IMAGE_WIDTH,config.IMAGE_HEIGHT,3), dtype='uint8')
-    r_seg = np.zeros((config.BATCH_SIZE, config.IMAGE_WIDTH,config.IMAGE_HEIGHT,1), dtype='uint8')
-    r_tar = np.zeros((config.BATCH_SIZE, config.TARGET_WIDTH,config.TARGET_HEIGHT,3), dtype='uint8')
-    for i in range(config.BATCH_SIZE):
-        r_ims[i, :, :, :], r_seg[i, :, :, :], r_tar[i, :, :, :] = make_image(chars, config, seed * config.BATCH_SIZE + i)
+    r_ims = np.zeros((config.BLOCK_SIZE, config.IMAGE_WIDTH,config.IMAGE_HEIGHT,3), dtype='uint8')
+    r_seg = np.zeros((config.BLOCK_SIZE, config.IMAGE_WIDTH,config.IMAGE_HEIGHT,1), dtype='uint8')
+    r_tar = np.zeros((config.BLOCK_SIZE, config.TARGET_WIDTH,config.TARGET_HEIGHT,3), dtype='uint8')
+    for i in range(config.BLOCK_SIZE):
+        r_ims[i, :, :, :], r_seg[i, :, :, :], r_tar[i, :, :, :] = make_image(chars, config, seed * config.BLOCK_SIZE + i)
     return r_ims, r_seg, r_tar
 
 
@@ -376,10 +380,10 @@ def generate_dataset(path,
         print('Seed fixed')
 
     # feed results into the dataset
-    if config.STORE_AS_BATCH:
-        N //= config.BATCH_SIZE
+    if config.STORE_AS_BLOCK:
+        N //= config.BLOCK_SIZE
     for i in tqdm(range(N)):
-        if config.STORE_AS_BATCH:
+        if config.STORE_AS_BLOCK:
             im, seg, tar = make_batch(chars,
                                       config,
                                       seed=i)
