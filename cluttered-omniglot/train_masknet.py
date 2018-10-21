@@ -10,11 +10,12 @@ FOLD_NUM = 1
 TRAIN_SIZE = 2000000
 VAL_SIZE = 10000
 TEST_SIZE = 10000
+BLOCK_SIZE = 250
 LOG_DIR = os.path.join(os.getcwd(), 'logs/' + model_name + '/')
 
 # Train encoder and discriminator
 # A trained Siamese-U-Net model is required
-NUM_CHARS = 4
+NUM_CHARS = 10
 
 def train_encoder():
     print('')
@@ -28,10 +29,11 @@ def train_encoder():
                    epochs=5,
                    train_size=TRAIN_SIZE,
                    val_size=VAL_SIZE,
+                   block_size=BLOCK_SIZE,
                    model=model_name,
                    train_mode='encoder_decoder',
                    feature_maps=24,
-                   batch_size=50,
+                   batch_size=250,
                    learning_rate=0.00005,
                    pretraining_checkpoint=ckptdir,
                    maximum_number_of_steps=0)
@@ -47,7 +49,8 @@ def train_discriminator():
     model.training(datadir,
                    logdir,
                    epochs=5,
-                   test_size=TEST_SIZE
+                   test_size=TEST_SIZE,
+                   block_size=BLOCK_SIZE,
                    model=model_name,
                    train_mode='discriminator',
                    feature_maps=24,

@@ -109,8 +109,7 @@ venv.bak/
 *.npy
 *.pickle
 *~
-./cluttered_omniglot/*
-cluttered_omniglot
-cluttered_omniglot/*
+
+cluttered-omniglot/logs/
 
 

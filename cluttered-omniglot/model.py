@@ -20,6 +20,8 @@ import multiprocessing as mp
 from queue import Queue
 import threading
 
+import dataset_utils
+
 from spatial_transformer import transformer
 
 # Forgive me, God
@@ -806,6 +808,8 @@ def training(dataset_dir,
                 num_blocks=num_val_blocks,
                 perms=val_perms), batch_size)
 
+        print("Beginning session")
+
         #Start Session
         with tf.Session() as sess:
             #Initialize logging files
@@ -840,9 +844,8 @@ def training(dataset_dir,
                 last_time = time.time()
                 for step in range(max_train_steps):
                     images_batch, labels_batch, target_batch = next(train_generator)
-                    np.save("images_sample_step_{}".format(step), images_batch[7])
-                    np.save("labels_sample_step_{}".format(step), labels_batch[7])
-                    np.save("target_sample_step_{}".format(step), target_batch[7])
+                    print(target_batch.shape, images_batch.shape, labels_batch.shape)
+                    time.sleep(10)
                     _, loss_value = sess.run([train_op, loss],
                                              feed_dict = {targets: target_batch,
                                                           images: images_batch,
@@ -851,7 +854,7 @@ def training(dataset_dir,
                     step_count += 1
                     step += 1
                     new_time = time.time()
-                    # print("Step time: {}".format(new_time - last_time))
+                    print("Step time: {}".format(new_time - last_time))
                     duration.append(new_time - last_time)
                     last_time = new_time
 
@@ -911,7 +914,8 @@ def evaluation(dataset_dir,
                feature_maps=24,
                batch_size=250,
                threshold=0.3,
-               max_steps=0):
+               max_steps=0,
+               vis=False):
 
     # Currently only the siamese-u-net is implemented
     assert model in ['siamese-u-net', 'mask-net']
@@ -967,9 +971,9 @@ def evaluation(dataset_dir,
         elif model == 'mask-net':
             segmentations = mask_net(targets, images, feature_maps=feature_maps, training=False, rgb_mean=mean, rgb_std=std)
 
-
         #Calculate metrics: IoU
         binary_segmentations = threshold_segmentations(segmentations)
+
         mean_IoU = calculate_IoU(binary_segmentations, labels, threshold=threshold)
         #Calculate metrics: Localization Accuracy
         lcomx, lcomy = center_of_mass(labels)
@@ -1010,10 +1014,32 @@ def evaluation(dataset_dir,
             os_distances = [0 for x in range(max_steps)]
             for step in range(max_steps):
                 images_batch, labels_batch, target_batch = next(test_train_generator)
-                val_IoU[step], val_distances[step] = sess.run([mean_IoU, mean_dist],
-                                         feed_dict = {targets: target_batch,
-                                                      images: images_batch,
-                                                      labels: labels_batch})
+                val_IoU[step], val_distances[step], segs = sess.run(
+                    [mean_IoU, mean_dist, binary_segmentations],
+                    feed_dict = {targets: target_batch,
+                                 images: images_batch,
+                                 labels: labels_batch})
+
+                if vis:
+                    saved_idx = np.random.choice(batch_size)
+                    vis_dir = os.path.join(logdir, "vis/")
+                    dataset_utils.mkdir_if_missing(vis_dir)
+                    np.save(
+                        os.path.join(vis_dir, "sample_pred_{}.npy").format(step),
+                        segs[saved_idx],
+                        allow_pickle=False)
+                    np.save(
+                        os.path.join(vis_dir, "sample_gt_{}.npy").format(step),
+                        labels_batch[saved_idx],
+                        allow_pickle=False)
+                    np.save(
+                        os.path.join(vis_dir, "sample_tar_{}.npy").format(step),
+                        target_batch[saved_idx],
+                        allow_pickle=False)
+                    np.save(
+                        os.path.join(vis_dir, "sample_im_{}.npy").format(step),
+                        images_batch[saved_idx],
+                        allow_pickle=False)
 
                 images_batch, labels_batch, target_batch = next(test_eval_generator)
                 os_IoU[step], os_distances[step] = sess.run([mean_IoU, mean_dist],

@@ -6,14 +6,15 @@ DATASET_DIR = os.path.join(
     "/nfs/diskstation/projects/dex-net/segmentation/datasets/",
     'cluttered_omniglot/'
 )
-FOLD_NUM = 5
+FOLD_NUM = 1
 TRAIN_SIZE = 2000000
 VAL_SIZE = 10000
 TEST_SIZE = 10000
 BLOCK_SIZE = 250
 LOG_DIR = os.path.join(os.getcwd(), 'logs/' + model_name + '/')
+VISUALIZE = True
 
-NUM_CHARS = 4
+NUM_CHARS = 10
 
 def train():
     print('')
@@ -29,7 +30,8 @@ def train():
                    block_size=BLOCK_SIZE,
                    feature_maps=24,
                    batch_size=250,
-                   learning_rate=0.0005,
+                   pretraining_checkpoint=logdir,
+                   learning_rate=0.0002,
                    maximum_number_of_steps=0)
 
 def evaluate():
@@ -46,8 +48,9 @@ def evaluate():
                      feature_maps=24,
                      batch_size=250,
                      threshold=0.3,
-                     max_steps=0)
+                     max_steps=0,
+                     vis=VISUALIZE)
 
 if __name__ == "__main__":
-    train()
-    # evaluate()
+    # train()
+    evaluate()
