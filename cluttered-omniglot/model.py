@@ -24,10 +24,6 @@ import dataset_utils
 
 from spatial_transformer import transformer
 
-# Forgive me, God
-# IMAGE_DIM = 96
-# TARGET_DIM = 32
-
 ### Encoder ###
 
 def encoder(images, feature_maps=16, dilated=False, reuse=False, scope='encoder'):
@@ -44,11 +40,11 @@ def encoder(images, feature_maps=16, dilated=False, reuse=False, scope='encoder'
                             biases_initializer=None,
                             activation_fn=tf.nn.relu):
 
-            net = slim.conv2d(net, num_outputs=feature_maps*(2**1), kernel_size=3, scope='encode1/conv3_1')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**1), kernel_size=3, stride=[2, 2], scope='encode1/conv3_1')
             end_points['encode1/conv3_1'] = net
 
             net = slim.avg_pool2d(net, [2, 2], scope='encode1/pool')
-            net = slim.conv2d(net, num_outputs=feature_maps*(2**2), kernel_size=3, scope='encode2/conv3_1')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**2), kernel_size=3, stride=[2, 2], scope='encode2/conv3_1')
             end_points['encode2/conv3_1'] = net
 
             net = slim.avg_pool2d(net, [2, 2], scope='encode2/pool')
@@ -80,6 +76,7 @@ def encoder(images, feature_maps=16, dilated=False, reuse=False, scope='encoder'
 #Decoder with skip connections
 def decoder(images, encoder_end_points, feature_maps=16, num_classes=2, reuse=False, scope='decoder'):
     def conv(fmaps, ks=3): return lambda net, name: slim.conv2d(net, num_outputs=fmaps, kernel_size=ks, scope=name)
+    def conv_t(fmaps, ks=3): return lambda net, name: slim.conv2d_transpose(net, num_outputs=fmaps, kernel_size=ks, stride=[2, 2], scope=name)
     def skip(end_point): return lambda net, name: tf.concat([net, end_point], axis=3, name=name)
     unpool =  lambda net, name: tf.image.resize_nearest_neighbor(net, [2*tf.shape(net)[1], 2*tf.shape(net)[2]], name=name)
 
@@ -101,11 +98,11 @@ def decoder(images, encoder_end_points, feature_maps=16, num_classes=2, reuse=Fa
     layers['decode3/unpool'] = unpool
 
     layers['decode2/skip'] = skip(encoder_end_points['encode2/conv3_1'])
-    layers['decode2/conv3_1'] = conv(feature_maps*(2**1))
+    layers['decode2/conv3_1'] = conv_t(feature_maps*(2**1))
     layers['decode2/unpool'] = unpool
 
     layers['decode1/skip'] = skip(encoder_end_points['encode1/conv3_1'])
-    layers['decode1/classifier'] = lambda net, name: slim.conv2d(net, num_outputs=num_classes, kernel_size=3, activation_fn=None, scope=name)
+    layers['decode1/classifier'] = lambda net, name: slim.conv2d_transpose(net, num_outputs=num_classes, kernel_size=3, stride=[2, 2], activation_fn=None, scope=name)
 
     with tf.variable_scope(scope, reuse=reuse):
         net = images
@@ -118,6 +115,7 @@ def decoder(images, encoder_end_points, feature_maps=16, num_classes=2, reuse=Fa
                             weights_regularizer=tf.contrib.layers.l2_regularizer(1e-9),
                             activation_fn=tf.nn.relu):
             for layer_name, layer_op in layers.items():
+                print(layer_name)
                 net = layer_op(net, layer_name)
                 end_points[layer_name] = net
 
@@ -179,25 +177,26 @@ def siamese_u_net(targets, images, feature_maps=24, threshold=0.3):
 
     #encode target
     targets_encoded, _ = encoder(targets,
-                                 feature_maps=feature_maps,
-                                 dilated=False,
-                                 reuse=False,
-                                 scope='clean_encoder')
+                              feature_maps=feature_maps,
+                              dilated=False,
+                              reuse=False,
+                              scope='clean_encoder')
 
 
     images_encoded, images_encoded_end_points = encoder(images,
-                                                        feature_maps=feature_maps,
-                                                        dilated=True,
-                                                        reuse=False,
-                                                        scope='clutter_encoder')
+                                                    feature_maps=feature_maps,
+                                                    dilated=True,
+                                                    reuse=False,
+                                                    scope='clutter_encoder')
 
 
     #calculate crosscorrelation
     #target_encoded has to be [batch, 1, 1, fmaps] for this to work
     matched = matching_filter(images_encoded, targets_encoded, mode='standard')
     matched = matched * targets_encoded
-
+    print(matched.get_shape())
     decoder_input = slim.layer_norm(matched, scale=False, center=False, scope='matching_normalization')
+    print(decoder_input.get_shape())
 
     #get segmentation mask
     segmentations = decoder(decoder_input,
@@ -264,7 +263,6 @@ def mask_net(targets, images, labels=None, feature_maps=24, training=False, thre
         # Draw random indices for bg proposals
         bg_index = [tf.expand_dims(tf.random_shuffle(tf.range(0, mx*my)), axis=1) for x in range(batch_size)]
         bg_index = tf.concat(bg_index, axis=1)
-
 
         if training == 'encoder_decoder':
             # Generate 4 foreground and 4 background proposals
@@ -844,8 +842,6 @@ def training(dataset_dir,
                 last_time = time.time()
                 for step in range(max_train_steps):
                     images_batch, labels_batch, target_batch = next(train_generator)
-                    print(target_batch.shape, images_batch.shape, labels_batch.shape)
-                    time.sleep(10)
                     _, loss_value = sess.run([train_op, loss],
                                              feed_dict = {targets: target_batch,
                                                           images: images_batch,
@@ -854,13 +850,12 @@ def training(dataset_dir,
                     step_count += 1
                     step += 1
                     new_time = time.time()
-                    print("Step time: {}".format(new_time - last_time))
                     duration.append(new_time - last_time)
                     last_time = new_time
 
 
                     #Evaluate
-                    if step_count % 200 == 0 or step_count == 1:
+                    if step_count % 100 == 0 or step_count == 1:
                         #Evaluate and print training error and IoU
                         summary_str_train, tf_IoU = sess.run([summary, mean_IoU],
                                                              feed_dict = {targets: target_batch,

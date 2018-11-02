@@ -98,9 +98,10 @@ def prepare_char(some_char, angle=20, shear=10, scale=2):
 
     aff_bas = np.array([[a*np.cos(phi+theta), b*np.sin(phi-theta), -mnx],[-a*np.sin(phi+theta), b*np.cos(phi-theta), -mny],[0, 0, 1]])
     aff_prm = np.linalg.inv(aff_bas)
+
     some_char = some_char.transform((int(mxx-mnx),int(mxy-mny)),
-                                  method = Image.AFFINE,
-                                  data = np.ndarray.flatten(aff_prm[0:2,:]))
+                                    method = Image.AFFINE,
+                                    data = np.ndarray.flatten(aff_prm[0:2,:]))
     some_char = some_char.resize((int(32*(mxx-mnx)/105),int(32*(mxy-mny)/105)))
 
     return some_char

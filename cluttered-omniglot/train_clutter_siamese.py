@@ -4,23 +4,23 @@ import os
 model_name = 'siamese-u-net'
 DATASET_DIR = os.path.join(
     "/nfs/diskstation/projects/dex-net/segmentation/datasets/",
-    'cluttered_omniglot/'
+    "mask-net"
 )
-FOLD_NUM = 1
-TRAIN_SIZE = 2000000
-VAL_SIZE = 10000
-TEST_SIZE = 10000
-BLOCK_SIZE = 250
-LOG_DIR = os.path.join(os.getcwd(), 'logs/' + model_name + '/')
-VISUALIZE = True
+FOLD_NUM = 0
+TRAIN_SIZE = 258700
+VAL_SIZE = 15500
+TEST_SIZE = 15500
+BATCH_SIZE = 5
+BLOCK_SIZE = 50
+LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
+VISUALIZE = False
 
-NUM_CHARS = 10
 
 def train():
     print('')
     datadir = os.path.join(
-        DATASET_DIR, "{}_characters".format(NUM_CHARS), "fold_{:04d}".format(FOLD_NUM))
-    logdir = LOG_DIR + '%.d_characters/' % (NUM_CHARS)
+        DATASET_DIR, "fold_{:04d}".format(FOLD_NUM))
+    logdir = LOG_DIR
 
     model.training(datadir,
                    logdir,
@@ -29,16 +29,15 @@ def train():
                    val_size=VAL_SIZE,
                    block_size=BLOCK_SIZE,
                    feature_maps=24,
-                   batch_size=250,
-                   pretraining_checkpoint=logdir,
-                   learning_rate=0.0002,
+                   batch_size=BATCH_SIZE,
+                   learning_rate=0.0005,
                    maximum_number_of_steps=0)
 
 def evaluate():
     print('')
     datadir = os.path.join(
-        DATASET_DIR, "{}_characters".format(NUM_CHARS), "fold_{:04d}".format(FOLD_NUM))
-    logdir = LOG_DIR + '%.d_characters/'%(NUM_CHARS)
+        DATASET_DIR, "fold_{:04d}".format(FOLD_NUM))
+    logdir = LOG_DIR
 
     model.evaluation(datadir,
                      logdir,
