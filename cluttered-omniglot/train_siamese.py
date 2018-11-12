@@ -30,7 +30,6 @@ def train():
                    block_size=BLOCK_SIZE,
                    feature_maps=24,
                    batch_size=250,
-                   pretraining_checkpoint=logdir,
                    learning_rate=0.0002,
                    maximum_number_of_steps=0)
 

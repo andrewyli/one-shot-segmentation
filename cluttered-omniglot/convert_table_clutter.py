@@ -10,7 +10,7 @@ from skimage import io
 from tqdm import tqdm
 
 DATASET_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-block-npy"
-OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net/fold_0000"
+OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net/fold_0001"
 mkdir_if_missing(OUT_DIR)
 mkdir_if_missing(os.path.join(OUT_DIR, "train"))
 mkdir_if_missing(os.path.join(OUT_DIR, "val-train"))
@@ -29,8 +29,12 @@ IM_WIDTH = 512
 IM_SIZE = 384
 TAR_SIZE = 128
 
+# Image distortion
+ANGLE = 100
+SHEAR = 4
+
 # For storage purposes
-BLOCK_SIZE = 50
+BLOCK_SIZE = 500
 
 
 def rot_x(phi, theta, ptx, pty):
@@ -104,6 +108,7 @@ def resize_scene(im):
 
 
 def main():
+    data_count = 0
     train_indices = set(np.load(
         os.path.join(DATASET_DIR, "train_indices.npy")))
     test_indices = set(np.load(
@@ -120,16 +125,12 @@ def main():
     test_seg_block = np.zeros((BLOCK_SIZE, IM_SIZE, IM_SIZE, 1))
     test_tar_block = np.zeros((BLOCK_SIZE, TAR_SIZE, TAR_SIZE, 3))
     for im_idx in tqdm(range(NUM_IMS)):
-        if im_idx in train_indices:
-            continue
         im_path = os.path.join(
             DATASET_DIR,
             "depth_ims",
             "image_{:06d}.png".format(im_idx))
         im = io.imread(im_path, as_gray=True)
         im = resize_scene(im)
-        """plt.figure()
-        plt.imshow(im)"""
         for mask_idx in range(11):
             channel_name = "image_{:06d}_channel_{:03d}.png".format(im_idx, mask_idx)
             amodal_path = os.path.join(
@@ -140,16 +141,18 @@ def main():
 
             # if there is no amodal mask, object doesn't exist.
             try:
-                amodal_mask = make_target(amodal_mask)
+                amodal_mask = make_target(amodal_mask, angle=ANGLE, shear=SHEAR)
+                amodal_mask[amodal_mask > 0] = 1
             except:
                 break
-
+            data_count += 1
             modal_path = os.path.join(
                 DATASET_DIR,
                 "modal_segmasks",
                 channel_name)
             modal_mask = io.imread(modal_path, as_gray=True)
             modal_mask = resize_scene(modal_mask)
+            modal_mask[modal_mask > 0] = 1
 
             # saving to train or test folder
             if im_idx in train_indices:
@@ -175,7 +178,7 @@ def main():
                            train_tar_block)
                 train_counter += 1
 
-            if im_idx in test_indices:
+            elif im_idx in test_indices:
                 test_idx = test_counter % BLOCK_SIZE
                 test_ims_block[test_idx] = np.stack((im, im, im), axis=2)
                 test_seg_block[test_idx] = modal_mask[:, :, np.newaxis]
@@ -200,6 +203,6 @@ def main():
                             test_tar_block)
                     test_counters[test_folder_idx] += 1
                 test_counter += 1
-
+    print("Data count: {}".format(data_count))
 if __name__ == "__main__":
     main()

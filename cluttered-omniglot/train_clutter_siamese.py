@@ -8,9 +8,9 @@ DATASET_DIR = os.path.join(
 )
 FOLD_NUM = 0
 TRAIN_SIZE = 258700
-VAL_SIZE = 15500
-TEST_SIZE = 15500
-BATCH_SIZE = 5
+VAL_SIZE = 14800
+TEST_SIZE = 16050
+BATCH_SIZE = 10
 BLOCK_SIZE = 50
 LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
 VISUALIZE = False
@@ -31,6 +31,7 @@ def train():
                    feature_maps=24,
                    batch_size=BATCH_SIZE,
                    learning_rate=0.0005,
+                   pretraining_checkpoint=logdir,
                    maximum_number_of_steps=0)
 
 def evaluate():
@@ -45,7 +46,7 @@ def evaluate():
                      block_size=BLOCK_SIZE,
                      model=model_name,
                      feature_maps=24,
-                     batch_size=250,
+                     batch_size=BATCH_SIZE,
                      threshold=0.3,
                      max_steps=0,
                      vis=VISUALIZE)

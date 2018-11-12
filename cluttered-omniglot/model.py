@@ -40,33 +40,41 @@ def encoder(images, feature_maps=16, dilated=False, reuse=False, scope='encoder'
                             biases_initializer=None,
                             activation_fn=tf.nn.relu):
 
-            net = slim.conv2d(net, num_outputs=feature_maps*(2**1), kernel_size=3, stride=[2, 2], scope='encode1/conv3_1')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**1), kernel_size=3, scope='encode1/conv3_1')
             end_points['encode1/conv3_1'] = net
 
             net = slim.avg_pool2d(net, [2, 2], scope='encode1/pool')
-            net = slim.conv2d(net, num_outputs=feature_maps*(2**2), kernel_size=3, stride=[2, 2], scope='encode2/conv3_1')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**2), kernel_size=3, scope='encode2/conv3_1')
             end_points['encode2/conv3_1'] = net
 
             net = slim.avg_pool2d(net, [2, 2], scope='encode2/pool')
-            net = slim.conv2d(net, num_outputs=feature_maps*(2**3), kernel_size=3, scope='encode3/conv3_1')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**2), kernel_size=3, scope='encode3/conv3_1')
             end_points['encode3/conv3_1'] = net
 
             net = slim.avg_pool2d(net, [2, 2], scope='encode3/pool')
             net = slim.conv2d(net, num_outputs=feature_maps*(2**3), kernel_size=3, scope='encode4/conv3_1')
             end_points['encode4/conv3_1'] = net
 
-            if dilated == False:
-                net = slim.avg_pool2d(net, [2, 2], scope='encode4/pool')
-            if dilated == False:
-                net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=2, scope='encode5/conv3_1')
-            elif dilated == True:
-                net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=2, rate=2, scope='encode5/conv3_1')
+            net = slim.avg_pool2d(net, [2, 2], scope='encode4/pool')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**3), kernel_size=3, scope='encode5/conv3_1')
             end_points['encode5/conv3_1'] = net
 
-            if dilated == False:
-                net = slim.avg_pool2d(net, [2, 2], scope='encode5/pool')
-            net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=1, scope='encode6/conv3_1')
+            net = slim.avg_pool2d(net, [2, 2], scope='encode5/pool')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**3), kernel_size=3, scope='encode6/conv3_1')
             end_points['encode6/conv3_1'] = net
+
+            if dilated == False:
+                net = slim.avg_pool2d(net, [2, 2], scope='encode6/pool')
+            if dilated == False:
+                net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=2, scope='encode7/conv3_1')
+            elif dilated == True:
+                net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=2, rate=2, scope='encode7/conv3_1')
+            end_points['encode7/conv3_1'] = net
+
+            if dilated == False:
+                net = slim.avg_pool2d(net, [2, 2], scope='encode7/pool')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=1, scope='encode8/conv3_1')
+            end_points['encode8/conv3_1'] = net
 
     return net, end_points
 
@@ -81,13 +89,21 @@ def decoder(images, encoder_end_points, feature_maps=16, num_classes=2, reuse=Fa
     unpool =  lambda net, name: tf.image.resize_nearest_neighbor(net, [2*tf.shape(net)[1], 2*tf.shape(net)[2]], name=name)
 
     layers = OrderedDict()
-    layers['decode6/skip'] = skip(encoder_end_points['encode6/conv3_1'])
-    layers['decode6/conv3_1'] = conv(feature_maps*(2**3), ks=1)
+    layers['decode8/skip'] = skip(encoder_end_points['encode8/conv3_1'])
+    layers['decode8/conv3_1'] = conv(feature_maps*(2**3), ks=1)
     #layers['decode6/unpool'] = unpool
 
-    layers['decode5/skip'] = skip(encoder_end_points['encode5/conv3_1'])
-    layers['decode5/conv3_1'] = conv(feature_maps*(2**3), ks=2)
+    layers['decode7/skip'] = skip(encoder_end_points['encode7/conv3_1'])
+    layers['decode7/conv3_1'] = conv(feature_maps*(2**3), ks=2)
     #layers['decode5/unpool'] = unpool
+
+    layers['decode6/skip'] = skip(encoder_end_points['encode6/conv3_1'])
+    layers['decode6/conv3_1'] = conv(feature_maps*(2**3))
+    layers['decode6/unpool'] = unpool
+
+    layers['decode5/skip'] = skip(encoder_end_points['encode5/conv3_1'])
+    layers['decode5/conv3_1'] = conv(feature_maps*(2**2))
+    layers['decode5/unpool'] = unpool
 
     layers['decode4/skip'] = skip(encoder_end_points['encode4/conv3_1'])
     layers['decode4/conv3_1'] = conv(feature_maps*(2**2))
@@ -98,11 +114,11 @@ def decoder(images, encoder_end_points, feature_maps=16, num_classes=2, reuse=Fa
     layers['decode3/unpool'] = unpool
 
     layers['decode2/skip'] = skip(encoder_end_points['encode2/conv3_1'])
-    layers['decode2/conv3_1'] = conv_t(feature_maps*(2**1))
+    layers['decode2/conv3_1'] = conv(feature_maps*(2**1))
     layers['decode2/unpool'] = unpool
 
     layers['decode1/skip'] = skip(encoder_end_points['encode1/conv3_1'])
-    layers['decode1/classifier'] = lambda net, name: slim.conv2d_transpose(net, num_outputs=num_classes, kernel_size=3, stride=[2, 2], activation_fn=None, scope=name)
+    layers['decode1/classifier'] = lambda net, name: slim.conv2d_transpose(net, num_outputs=num_classes, kernel_size=3, activation_fn=None, scope=name)
 
     with tf.variable_scope(scope, reuse=reuse):
         net = images
@@ -115,7 +131,6 @@ def decoder(images, encoder_end_points, feature_maps=16, num_classes=2, reuse=Fa
                             weights_regularizer=tf.contrib.layers.l2_regularizer(1e-9),
                             activation_fn=tf.nn.relu):
             for layer_name, layer_op in layers.items():
-                print(layer_name)
                 net = layer_op(net, layer_name)
                 end_points[layer_name] = net
 
@@ -194,9 +209,9 @@ def siamese_u_net(targets, images, feature_maps=24, threshold=0.3):
     #target_encoded has to be [batch, 1, 1, fmaps] for this to work
     matched = matching_filter(images_encoded, targets_encoded, mode='standard')
     matched = matched * targets_encoded
-    print(matched.get_shape())
+    # print(matched.get_shape())
     decoder_input = slim.layer_norm(matched, scale=False, center=False, scope='matching_normalization')
-    print(decoder_input.get_shape())
+    # print(decoder_input.get_shape())
 
     #get segmentation mask
     segmentations = decoder(decoder_input,
@@ -479,32 +494,7 @@ def load_test(fold_dir, index, subset):
     return ims_test, seg_test, tar_test
 
 
-def batch_helper(
-        dataset_dir,
-        split,
-        modifier,
-        batch_size,
-        perms,
-        step):
-    images_batch = np.zeros((batch_size, IMAGE_DIM, IMAGE_DIM, 3))
-    labels_batch = np.zeros((batch_size, IMAGE_DIM, IMAGE_DIM, 1))
-    target_batch = np.zeros((batch_size, TARGET_DIM, TARGET_DIM, 3))
-    for i in range(batch_size):
-        index = perms[step*batch_size+i]
-        # load image based on generator type
-        if split == "train":
-            im, seg, tar = load_train(dataset_dir, index, modifier)
-        if split == "val":
-            im, seg, tar = load_val(dataset_dir, index, modifier)
-        if split == "test":
-            im, seg, tar = load_test(dataset_dir, index, modifier)
-        images_batch[i, :, :, :] = im
-        labels_batch[i, :, :, :] = seg
-        target_batch[i, :, :, :] = tar
-    return images_batch, labels_batch, target_batch
-
-
-def threaded_batch_generator(generator, batch_size, max_queue_len=100):
+def threaded_batch_generator(generator, batch_size, max_queue_len=1):
     queue = Queue(maxsize=max_queue_len)
     sentinel = object()
 
@@ -559,6 +549,10 @@ def block_generator(
             im, seg, tar = load_val(dataset_dir, index, modifier)
         if split == "test":
             im, seg, tar = load_test(dataset_dir, index, modifier)
+
+        # make seg binary
+        seg[seg > 0] = 1
+
         yield im, seg, tar
         # images_batch = np.zeros((batch_size, IMAGE_DIM, IMAGE_DIM, 3))
         # labels_batch = np.zeros((batch_size, IMAGE_DIM, IMAGE_DIM, 1))
@@ -790,7 +784,7 @@ def training(dataset_dir,
                 split="train",
                 modifier=False,
                 num_blocks=num_train_blocks,
-                perms=perms), batch_size)
+                perms=perms), batch_size, max_queue_len=100)
         val_train_generator = threaded_batch_generator(
             block_generator(
                 dataset_dir,
@@ -855,7 +849,7 @@ def training(dataset_dir,
 
 
                     #Evaluate
-                    if step_count % 100 == 0 or step_count == 1:
+                    if step_count % 200 == 0 or step_count == 1:
                         #Evaluate and print training error and IoU
                         summary_str_train, tf_IoU = sess.run([summary, mean_IoU],
                                                              feed_dict = {targets: target_batch,
@@ -918,7 +912,7 @@ def evaluation(dataset_dir,
     with tf.Graph().as_default():
 
         #Define logging parameters
-        OSEG_CKPT_FILE = logdir + 'Run.ckpt'
+        OSEG_CKPT_FILE = logdir + 'Run_Epoch1_Step7800.ckpt'
 
         perms = np.random.permutation(test_size // block_size)
 
