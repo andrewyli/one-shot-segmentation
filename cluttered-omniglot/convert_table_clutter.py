@@ -3,6 +3,8 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+cpu_cores = [9, 10] # Cores (numbered 0-11)
+os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.getpid()))
 
 from dataset_utils import mkdir_if_missing
 from PIL import Image
@@ -34,7 +36,7 @@ ANGLE = 100
 SHEAR = 4
 
 # For storage purposes
-BLOCK_SIZE = 500
+BLOCK_SIZE = 50
 
 
 def rot_x(phi, theta, ptx, pty):
@@ -130,6 +132,7 @@ def main():
             "depth_ims",
             "image_{:06d}.png".format(im_idx))
         im = io.imread(im_path, as_gray=True)
+        print("Resizing image")
         im = resize_scene(im)
         for mask_idx in range(11):
             channel_name = "image_{:06d}_channel_{:03d}.png".format(im_idx, mask_idx)
@@ -137,11 +140,14 @@ def main():
                 DATASET_DIR,
                 "amodal_segmasks",
                 channel_name)
+            print("reading amodal mask")
             amodal_mask = io.imread(amodal_path, as_gray=True)
 
             # if there is no amodal mask, object doesn't exist.
             try:
+                print("making amodal mask augment")
                 amodal_mask = make_target(amodal_mask, angle=ANGLE, shear=SHEAR)
+                print("making amodal mask 0 1 values")
                 amodal_mask[amodal_mask > 0] = 1
             except:
                 break
@@ -150,6 +156,7 @@ def main():
                 DATASET_DIR,
                 "modal_segmasks",
                 channel_name)
+            print("reading modal mask")
             modal_mask = io.imread(modal_path, as_gray=True)
             modal_mask = resize_scene(modal_mask)
             modal_mask[modal_mask > 0] = 1
@@ -161,6 +168,7 @@ def main():
                 train_seg_block[train_idx] = modal_mask[:, :, np.newaxis]
                 train_tar_block[train_idx] = np.stack((amodal_mask, amodal_mask, amodal_mask), axis=2)
                 if train_idx == BLOCK_SIZE - 1:
+                    print("saving to file train")
                     np.save(os.path.join(
                         OUT_DIR,
                         "train/",
@@ -177,13 +185,13 @@ def main():
                         "target_{:08d}.npy".format(train_counter // BLOCK_SIZE)),
                            train_tar_block)
                 train_counter += 1
-
             elif im_idx in test_indices:
                 test_idx = test_counter % BLOCK_SIZE
                 test_ims_block[test_idx] = np.stack((im, im, im), axis=2)
                 test_seg_block[test_idx] = modal_mask[:, :, np.newaxis]
                 test_tar_block[test_idx] = np.stack((amodal_mask, amodal_mask, amodal_mask), axis=2)
                 if test_idx == BLOCK_SIZE - 1:
+                    print("saving to test")
                     test_folder_idx = np.random.choice([0, 1, 2, 3])
                     test_folder = test_folders[test_folder_idx]
                     np.save(os.path.join(

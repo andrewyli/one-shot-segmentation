@@ -552,7 +552,6 @@ def block_generator(
 
         # make seg binary
         seg[seg > 0] = 1
-
         yield im, seg, tar
         # images_batch = np.zeros((batch_size, IMAGE_DIM, IMAGE_DIM, 3))
         # labels_batch = np.zeros((batch_size, IMAGE_DIM, IMAGE_DIM, 1))
@@ -912,7 +911,7 @@ def evaluation(dataset_dir,
     with tf.Graph().as_default():
 
         #Define logging parameters
-        OSEG_CKPT_FILE = logdir + 'Run_Epoch1_Step7800.ckpt'
+        OSEG_CKPT_FILE = logdir + 'Run_Epoch0_Step400.ckpt'
 
         perms = np.random.permutation(test_size // block_size)
 
@@ -937,13 +936,15 @@ def evaluation(dataset_dir,
                                            modifier="train",
                                            num_blocks=10,
                                            perms=perms)
-        for i in range((1000 // block_size) + 1):
+        for i in range((10 // block_size) + 1):
             sample = next(sample_generator)
             im_block, _, tar_block = sample
             sample_im_batch.append(im_block)
 
         mean = np.mean(np.array(sample_im_batch))
         std = np.std(np.array(sample_im_batch))
+        im_block = np.ones((1, 384, 384, 1))
+        tar_block = np.ones((1, 128, 128, 1))
 
         #generate tensorflow placeholders and variables
         images = tf.placeholder(tf.float32, shape=[batch_size,im_block.shape[1],im_block.shape[2],3], name='images')
@@ -975,6 +976,7 @@ def evaluation(dataset_dir,
         saver = tf.train.Saver()
         restorer = tf.train.Saver(slim.get_model_variables())
 
+        print("hi")
         test_train_generator = threaded_batch_generator(
             block_generator(
                 dataset_dir,
@@ -992,6 +994,7 @@ def evaluation(dataset_dir,
 
         #Start Session
         with tf.Session() as sess:
+            seg_counter = 0
             #Initialize from scratch or finetune from previous training
             sess.run(tf.global_variables_initializer())
             restorer.restore(sess, OSEG_CKPT_FILE)
@@ -1001,6 +1004,8 @@ def evaluation(dataset_dir,
             os_IoU = [0 for x in range(max_steps)]
             val_distances = [0 for x in range(max_steps)]
             os_distances = [0 for x in range(max_steps)]
+            percents = []
+            IoUs = []
             for step in range(max_steps):
                 images_batch, labels_batch, target_batch = next(test_train_generator)
                 val_IoU[step], val_distances[step], segs = sess.run(
@@ -1008,11 +1013,41 @@ def evaluation(dataset_dir,
                     feed_dict = {targets: target_batch,
                                  images: images_batch,
                                  labels: labels_batch})
+                for seg_idx in range(labels_batch.shape[0]):
+                    seg = labels_batch[seg_idx]
+                    percent = len(np.where(seg > 0)[0]) / (seg.shape[0] * seg.shape[1])
+                    percents.append(percent)
+                    IoUs.append(val_IoU[step][seg_idx])
+                    # print(percent, val_IoU[step][seg_idx])
+                    seg_counter += 1
+
+                if seg_counter == 1000:
+                    xs, ys = zip(*sorted(zip(percents, IoUs)))
+                    plt.plot(xs, ys)
+                    plt.savefig("./fig")
+                    break
+
 
                 if vis:
                     saved_idx = np.random.choice(batch_size)
+                    im = images_batch[saved_idx]
+                    seg = labels_batch[saved_idx]
+                    pred = segs[saved_idx]
                     vis_dir = os.path.join(logdir, "vis/")
                     dataset_utils.mkdir_if_missing(vis_dir)
+                    plt.figure(figsize=(15, 15))
+                    plt.imshow(im)
+                    plt.imshow(np.ma.masked_where(seg[...,0] == 0, seg[...,0]), cmap="summer")
+                    plt.title("Ground Truth Segmask", {"fontsize": 16})
+                    plt.savefig(os.path.join(vis_dir, "gt_overlay_{}.png").format(step))
+                    plt.clf()
+
+                    plt.imshow(im)
+                    plt.imshow(np.ma.masked_where(pred[...,0] == 0, pred[...,0]), cmap="coolwarm")
+                    plt.title("Predicted Segmask", {"fontsize": 16})
+                    plt.savefig(os.path.join(vis_dir, "pred_overlay_{}.png").format(step))
+                    plt.clf()
+
                     np.save(
                         os.path.join(vis_dir, "sample_pred_{}.npy").format(step),
                         segs[saved_idx],
@@ -1035,6 +1070,8 @@ def evaluation(dataset_dir,
                                          feed_dict = {targets: target_batch,
                                                       images: images_batch,
                                                       labels: labels_batch})
+                if step % 100 == 0 or step == 1:
+                    print("step_count: {}".format(step))
 
             print('Valiadation IoU: %.3f'%(np.mean(val_IoU)), 'Validation Distance: %.3f'%(np.mean(val_distances)))
             print('One-Shot IoU: %.3f'%(np.mean(os_IoU)), 'One-Shot Distance: %.3f'%(np.mean(os_distances)))
