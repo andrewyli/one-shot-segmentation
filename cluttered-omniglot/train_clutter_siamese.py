@@ -66,5 +66,5 @@ def evaluate():
                      vis=VISUALIZE)
 
 if __name__ == "__main__":
-    train()
-    # evaluate()
+    # train()
+    evaluate()

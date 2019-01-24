@@ -911,7 +911,7 @@ def evaluation(dataset_dir,
     with tf.Graph().as_default():
 
         #Define logging parameters
-        OSEG_CKPT_FILE = logdir + 'Run.ckpt'
+        OSEG_CKPT_FILE = logdir + 'Run_Epoch0_Step2000.ckpt'
 
         perms = np.random.permutation(test_size // block_size)
 
@@ -976,7 +976,6 @@ def evaluation(dataset_dir,
         saver = tf.train.Saver()
         restorer = tf.train.Saver(slim.get_model_variables())
 
-        print("hi")
         test_train_generator = threaded_batch_generator(
             block_generator(
                 dataset_dir,
@@ -1021,12 +1020,12 @@ def evaluation(dataset_dir,
                     # print(percent, val_IoU[step][seg_idx])
                     seg_counter += 1
 
-                if seg_counter == 1000:
-                    xs, ys = zip(*sorted(zip(percents, IoUs)))
-                    plt.plot(xs, ys)
-                    plt.savefig("./fig")
-                    break
-
+                # Code to plot the segmentation v. IoU graph
+                # if seg_counter == 1000:
+                #     xs, ys = zip(*sorted(zip(percents, IoUs)))
+                #     plt.plot(xs, ys)
+                #     plt.savefig("./fig")
+                #     break
 
                 if vis:
                     saved_idx = np.random.choice(batch_size)
@@ -1072,6 +1071,6 @@ def evaluation(dataset_dir,
                                                       labels: labels_batch})
                 if step % 100 == 0 or step == 1:
                     print("step_count: {}".format(step))
-
-            print('Valiadation IoU: %.3f'%(np.mean(val_IoU)), 'Validation Distance: %.3f'%(np.mean(val_distances)))
+            print('Validation IoU: %.3f'%(np.mean(val_IoU)))
+            print('Validation Distance: %.3f'%(np.mean(val_distances)))
             print('One-Shot IoU: %.3f'%(np.mean(os_IoU)), 'One-Shot Distance: %.3f'%(np.mean(os_distances)))
