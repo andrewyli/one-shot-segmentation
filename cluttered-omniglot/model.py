@@ -54,28 +54,28 @@ def encoder(images, feature_maps=16, dilated=False, reuse=False, scope='encoder'
             end_points['encode3/conv3_1'] = net
 
             net = slim.avg_pool2d(net, [2, 2], scope='encode3/pool')
-            net = slim.conv2d(net, num_outputs=feature_maps*(2**3), kernel_size=3, scope='encode4/conv3_1')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=3, scope='encode4/conv3_1')
             end_points['encode4/conv3_1'] = net
 
             net = slim.avg_pool2d(net, [2, 2], scope='encode4/pool')
-            net = slim.conv2d(net, num_outputs=feature_maps*(2**3), kernel_size=3, scope='encode5/conv3_1')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=3, scope='encode5/conv3_1')
             end_points['encode5/conv3_1'] = net
 
             net = slim.avg_pool2d(net, [2, 2], scope='encode5/pool')
-            net = slim.conv2d(net, num_outputs=feature_maps*(2**3), kernel_size=3, scope='encode6/conv3_1')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=3, scope='encode6/conv3_1')
             end_points['encode6/conv3_1'] = net
 
             if dilated == False:
                 net = slim.avg_pool2d(net, [2, 2], scope='encode6/pool')
             if dilated == False:
-                net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=2, scope='encode7/conv3_1')
+                net = slim.conv2d(net, num_outputs=feature_maps*(2**5), kernel_size=2, scope='encode7/conv3_1')
             elif dilated == True:
-                net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=2, rate=2, scope='encode7/conv3_1')
+                net = slim.conv2d(net, num_outputs=feature_maps*(2**5), kernel_size=2, rate=2, scope='encode7/conv3_1')
             end_points['encode7/conv3_1'] = net
 
             if dilated == False:
                 net = slim.avg_pool2d(net, [2, 2], scope='encode7/pool')
-            net = slim.conv2d(net, num_outputs=feature_maps*(2**4), kernel_size=1, scope='encode8/conv3_1')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**5), kernel_size=1, scope='encode8/conv3_1')
             end_points['encode8/conv3_1'] = net
 
     return net, end_points
