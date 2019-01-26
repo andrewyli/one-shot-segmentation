@@ -11,6 +11,8 @@ os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.get
 
 import time
 
+from tqdm import tqdm
+
 slim = tf.contrib.slim
 
 from joblib import Parallel, delayed
@@ -48,7 +50,7 @@ def encoder(images, feature_maps=16, dilated=False, reuse=False, scope='encoder'
             end_points['encode2/conv3_1'] = net
 
             net = slim.avg_pool2d(net, [2, 2], scope='encode2/pool')
-            net = slim.conv2d(net, num_outputs=feature_maps*(2**2), kernel_size=3, scope='encode3/conv3_1')
+            net = slim.conv2d(net, num_outputs=feature_maps*(2**3), kernel_size=3, scope='encode3/conv3_1')
             end_points['encode3/conv3_1'] = net
 
             net = slim.avg_pool2d(net, [2, 2], scope='encode3/pool')
@@ -1005,7 +1007,7 @@ def evaluation(dataset_dir,
             os_distances = [0 for x in range(max_steps)]
             percents = []
             IoUs = []
-            for step in range(max_steps):
+            for step in tqdm(range(max_steps)):
                 images_batch, labels_batch, target_batch = next(test_train_generator)
                 val_IoU[step], val_distances[step], segs = sess.run(
                     [mean_IoU, mean_dist, binary_segmentations],

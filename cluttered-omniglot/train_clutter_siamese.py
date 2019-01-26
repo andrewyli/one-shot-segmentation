@@ -43,9 +43,9 @@ def train():
                    train_size=TRAIN_SIZE,
                    val_size=VAL_SIZE,
                    block_size=BLOCK_SIZE,
-                   feature_maps=24,
+                   feature_maps=48,
                    batch_size=BATCH_SIZE,
-                   learning_rate=0.0005,
+                   learning_rate=0.00005,
                    maximum_number_of_steps=0)
 
 def evaluate():
