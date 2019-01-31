@@ -38,7 +38,7 @@ def encoder(images, feature_maps=16, dilated=False, reuse=False, scope='encoder'
                             normalizer_fn=slim.layer_norm,
                             normalizer_params={'scale': False},
                             weights_initializer=tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_AVG'),
-                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-9),
+                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-7),
                             biases_initializer=None,
                             activation_fn=tf.nn.relu):
 
@@ -92,23 +92,23 @@ def decoder(images, encoder_end_points, feature_maps=16, num_classes=2, reuse=Fa
 
     layers = OrderedDict()
     layers['decode8/skip'] = skip(encoder_end_points['encode8/conv3_1'])
-    layers['decode8/conv3_1'] = conv(feature_maps*(2**3), ks=1)
+    layers['decode8/conv3_1'] = conv(feature_maps*(2**4), ks=1)
     #layers['decode6/unpool'] = unpool
 
     layers['decode7/skip'] = skip(encoder_end_points['encode7/conv3_1'])
-    layers['decode7/conv3_1'] = conv(feature_maps*(2**3), ks=2)
+    layers['decode7/conv3_1'] = conv(feature_maps*(2**4), ks=2)
     #layers['decode5/unpool'] = unpool
 
     layers['decode6/skip'] = skip(encoder_end_points['encode6/conv3_1'])
-    layers['decode6/conv3_1'] = conv(feature_maps*(2**3))
+    layers['decode6/conv3_1'] = conv(feature_maps*(2**4))
     layers['decode6/unpool'] = unpool
 
     layers['decode5/skip'] = skip(encoder_end_points['encode5/conv3_1'])
-    layers['decode5/conv3_1'] = conv(feature_maps*(2**2))
+    layers['decode5/conv3_1'] = conv(feature_maps*(2**3))
     layers['decode5/unpool'] = unpool
 
     layers['decode4/skip'] = skip(encoder_end_points['encode4/conv3_1'])
-    layers['decode4/conv3_1'] = conv(feature_maps*(2**2))
+    layers['decode4/conv3_1'] = conv(feature_maps*(2**3))
     layers['decode4/unpool'] = unpool
 
     layers['decode3/skip'] = skip(encoder_end_points['encode3/conv3_1'])
@@ -1071,8 +1071,6 @@ def evaluation(dataset_dir,
                                          feed_dict = {targets: target_batch,
                                                       images: images_batch,
                                                       labels: labels_batch})
-                if step % 100 == 0 or step == 1:
-                    print("step_count: {}".format(step))
             print('Validation IoU: %.3f'%(np.mean(val_IoU)))
             print('Validation Distance: %.3f'%(np.mean(val_distances)))
             print('One-Shot IoU: %.3f'%(np.mean(os_IoU)), 'One-Shot Distance: %.3f'%(np.mean(os_distances)))
