@@ -7,7 +7,7 @@ DATASET_DIR = os.path.join(
     "/nfs/diskstation/projects/dex-net/segmentation/datasets/",
     "mask-net"
 )
-FOLD_NUM = 1
+FOLD_NUM = 0
 TRAIN_SIZE = 258700
 VAL_SIZE = 1480
 TEST_SIZE = 1480

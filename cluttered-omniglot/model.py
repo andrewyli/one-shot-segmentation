@@ -38,7 +38,7 @@ def encoder(images, feature_maps=16, dilated=False, reuse=False, scope='encoder'
                             normalizer_fn=slim.layer_norm,
                             normalizer_params={'scale': False},
                             weights_initializer=tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_AVG'),
-                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-7),
+                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-8),
                             biases_initializer=None,
                             activation_fn=tf.nn.relu):
 
@@ -130,7 +130,7 @@ def decoder(images, encoder_end_points, feature_maps=16, num_classes=2, reuse=Fa
                             normalizer_fn=slim.layer_norm,
                             normalizer_params={'scale': False},
                             weights_initializer=tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_AVG'),
-                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-9),
+                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-8),
                             activation_fn=tf.nn.relu):
             for layer_name, layer_op in layers.items():
                 net = layer_op(net, layer_name)
