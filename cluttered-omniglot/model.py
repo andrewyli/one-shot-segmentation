@@ -913,7 +913,7 @@ def evaluation(dataset_dir,
     with tf.Graph().as_default():
 
         #Define logging parameters
-        OSEG_CKPT_FILE = logdir + 'Run_Epoch0_Step20000.ckpt'
+        OSEG_CKPT_FILE = logdir + 'Run_Epoch4_Step117200.ckpt'
 
         perms = np.random.permutation(test_size // block_size)
 
@@ -1029,7 +1029,7 @@ def evaluation(dataset_dir,
                 #     plt.savefig("./fig")
                 #     break
 
-                if vis:
+                if vis and step < 100:
                     saved_idx = np.random.choice(batch_size)
                     im = images_batch[saved_idx]
                     seg = labels_batch[saved_idx]
@@ -1063,6 +1063,12 @@ def evaluation(dataset_dir,
                         allow_pickle=False)
                     np.save(
                         os.path.join(vis_dir, "sample_im_{}.npy").format(step),
+                        images_batch[saved_idx],
+                        allow_pickle=False)
+
+                    # normalized images
+                    np.save(
+                        os.path.join(vis_dir, "norm_im_{}.npy").format(step),
                         images_batch[saved_idx],
                         allow_pickle=False)
 
