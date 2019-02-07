@@ -3,32 +3,32 @@ import os
 
 model_name = 'siamese-u-net'
 
-# DATASET_DIR = os.path.join(
-#     "/nfs/diskstation/projects/dex-net/segmentation/datasets/",
-#     "mask-net"
-# )
-# FOLD_NUM = 0
-# TRAIN_SIZE = 258700
-# VAL_SIZE = 1480
-# TEST_SIZE = 1480
-# BATCH_SIZE = 10
-# BLOCK_SIZE = 50
-# LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
-# VISUALIZE = True
-
-
 DATASET_DIR = os.path.join(
     "/nfs/diskstation/projects/dex-net/segmentation/datasets/",
-    "mask-net-real"
+    "mask-net"
 )
 FOLD_NUM = 0
-TRAIN_SIZE = 0
-VAL_SIZE = 0
-TEST_SIZE = 6000
-BATCH_SIZE = 1
-BLOCK_SIZE = 1
+TRAIN_SIZE = 258700
+VAL_SIZE = 1480
+TEST_SIZE = 1480
+BATCH_SIZE = 10
+BLOCK_SIZE = 50
 LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
-VISUALIZE = True
+VISUALIZE = False
+
+
+# DATASET_DIR = os.path.join(
+#     "/nfs/diskstation/projects/dex-net/segmentation/datasets/",
+#     "mask-net-real"
+# )
+# FOLD_NUM = 0
+# TRAIN_SIZE = 0
+# VAL_SIZE = 0
+# TEST_SIZE = 6000
+# BATCH_SIZE = 1
+# BLOCK_SIZE = 1
+# LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
+# VISUALIZE = True
 
 
 def train():
@@ -66,5 +66,5 @@ def evaluate():
                      vis=VISUALIZE)
 
 if __name__ == "__main__":
-    # train()
-    evaluate()
+    train()
+    # evaluate()

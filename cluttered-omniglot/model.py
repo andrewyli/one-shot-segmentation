@@ -694,9 +694,9 @@ def training(dataset_dir,
         targets = tf.placeholder(tf.float32, shape=[batch_size,tar_block.shape[1],tar_block.shape[2],3], name='targets')
         learn_rate = tf.Variable(learning_rate)
 
-        #preprocess images
-        targets = (targets - mean)/std
-        images = (images - mean)/std
+        #preprocess images - removed due to rotated images not meaning well.
+        # targets = (targets - mean)/std
+        # images = (images - mean)/std
 
         #get predictions
         if model == 'siamese-u-net':
@@ -954,8 +954,8 @@ def evaluation(dataset_dir,
         targets = tf.placeholder(tf.float32, shape=[batch_size,tar_block.shape[1],tar_block.shape[2],3], name='targets')
 
         #preprocess images
-        targets = (targets - mean)/std
-        images = (images - mean)/std
+        # targets = (targets - mean)/std
+        # images = (images - mean)/std
 
         #get predictions
         if model == 'siamese-u-net':
