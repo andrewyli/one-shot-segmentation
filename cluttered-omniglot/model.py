@@ -804,8 +804,7 @@ def training(dataset_dir,
                 perms=val_perms), batch_size)
 
         # get a batch of real images to eval on, delete this later when you clean up
-        real_im_path = "/nfs/diskstation/projects/dex-net/segmentation/"
-        + "datasets/mask-net-real/fold_0000/"
+        real_im_path = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_0000/"
 
         real_eval_generator = threaded_batch_generator(
             block_generator(
