@@ -38,7 +38,7 @@ def encoder(images, feature_maps=16, dilated=False, reuse=False, scope='encoder'
                             normalizer_fn=slim.layer_norm,
                             normalizer_params={'scale': False},
                             weights_initializer=tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_AVG'),
-                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-8),
+                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-7),
                             biases_initializer=None,
                             activation_fn=tf.nn.relu):
 
@@ -130,7 +130,7 @@ def decoder(images, encoder_end_points, feature_maps=16, num_classes=2, reuse=Fa
                             normalizer_fn=slim.layer_norm,
                             normalizer_params={'scale': False},
                             weights_initializer=tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_AVG'),
-                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-8),
+                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-7),
                             activation_fn=tf.nn.relu):
             for layer_name, layer_op in layers.items():
                 net = layer_op(net, layer_name)
@@ -626,6 +626,7 @@ def training(dataset_dir,
              train_size,
              val_size,
              block_size,
+             real_size=-1,
              model='siamese-u-net',
              train_mode='encoder_decoder',
              feature_maps=24,
@@ -642,6 +643,7 @@ def training(dataset_dir,
     #Shuffle samples
     perms = np.random.permutation(train_size // block_size)
     val_perms = np.random.permutation(val_size // block_size)
+    real_perms = np.random.permutation(6000)
 
     with tf.Graph().as_default():
 
@@ -694,9 +696,9 @@ def training(dataset_dir,
         targets = tf.placeholder(tf.float32, shape=[batch_size,tar_block.shape[1],tar_block.shape[2],3], name='targets')
         learn_rate = tf.Variable(learning_rate)
 
-        #preprocess images - removed due to rotated images not meaning well.
-        # targets = (targets - mean)/std
-        # images = (images - mean)/std
+        # preprocess images
+        targets = (targets - mean)/std
+        images = (images - mean)/std
 
         #get predictions
         if model == 'siamese-u-net':
@@ -801,6 +803,18 @@ def training(dataset_dir,
                 num_blocks=num_val_blocks,
                 perms=val_perms), batch_size)
 
+        # get a batch of real images to eval on, delete this later when you clean up
+        real_im_path = "/nfs/diskstation/projects/dex-net/segmentation/"
+        + "datasets/mask-net-real/fold_0000/"
+
+        real_eval_generator = threaded_batch_generator(
+            block_generator(
+                real_im_path,
+                split="test",
+                modifier="eval",
+                num_blocks=6000,
+                perms=real_perms), batch_size)
+
         print("Beginning session")
 
         #Start Session
@@ -809,6 +823,10 @@ def training(dataset_dir,
             summary_writer_train = tf.summary.FileWriter(logdir, sess.graph)
             summary_writer_val_train = tf.summary.FileWriter(logdir + 'val_train')
             summary_writer_val_eval = tf.summary.FileWriter(logdir + 'val_eval')
+
+            # real image writer, can delete later
+            summary_writer_real_eval = tf.summary.FileWriter(logdir + 'real_eval')
+
 
             #Initialize from scratch or finetune from previous training
             sess.run(tf.global_variables_initializer())
@@ -880,6 +898,16 @@ def training(dataset_dir,
                         summary_writer_val_eval.add_summary(summary_str, step_count)
                         summary_writer_val_eval.flush()
 
+                        #evaluate real images, can delete later
+                        images_batch, labels_batch, target_batch = next(real_eval_generator)
+                        summary_str = sess.run(summary, feed_dict={targets: target_batch,
+                                                                   images: images_batch,
+                                                                   labels: labels_batch})
+
+                        summary_writer_real_eval.add_summary(summary_str, step_count)
+                        summary_writer_real_eval.flush()
+
+
 
                     #Create checkpoint
                     if step_count % 400 == 0 or step_count == epochs*max_train_steps:
@@ -913,7 +941,7 @@ def evaluation(dataset_dir,
     with tf.Graph().as_default():
 
         #Define logging parameters
-        OSEG_CKPT_FILE = logdir + 'Run_Epoch4_Step117200.ckpt'
+        OSEG_CKPT_FILE = logdir + 'Run_Epoch2_Step60000.ckpt'
 
         perms = np.random.permutation(test_size // block_size)
 
@@ -953,9 +981,9 @@ def evaluation(dataset_dir,
         labels = tf.placeholder(tf.int32, shape=[batch_size,im_block.shape[1],im_block.shape[2],1], name='labels')
         targets = tf.placeholder(tf.float32, shape=[batch_size,tar_block.shape[1],tar_block.shape[2],3], name='targets')
 
-        #preprocess images
-        # targets = (targets - mean)/std
-        # images = (images - mean)/std
+        # preprocess images
+        targets = (targets - mean)/std
+        images = (images - mean)/std
 
         #get predictions
         if model == 'siamese-u-net':
@@ -1009,8 +1037,8 @@ def evaluation(dataset_dir,
             IoUs = []
             for step in tqdm(range(max_steps)):
                 images_batch, labels_batch, target_batch = next(test_train_generator)
-                val_IoU[step], val_distances[step], segs = sess.run(
-                    [mean_IoU, mean_dist, binary_segmentations],
+                val_IoU[step], val_distances[step], segs, ims = sess.run(
+                    [mean_IoU, mean_dist, binary_segmentations, images],
                     feed_dict = {targets: target_batch,
                                  images: images_batch,
                                  labels: labels_batch})
@@ -1029,9 +1057,9 @@ def evaluation(dataset_dir,
                 #     plt.savefig("./fig")
                 #     break
 
-                if vis and step < 100:
+                if vis and step < 25:
                     saved_idx = np.random.choice(batch_size)
-                    im = images_batch[saved_idx]
+                    im = ims[saved_idx]
                     seg = labels_batch[saved_idx]
                     pred = segs[saved_idx]
                     vis_dir = os.path.join(logdir, "vis/")
@@ -1051,11 +1079,11 @@ def evaluation(dataset_dir,
 
                     np.save(
                         os.path.join(vis_dir, "sample_pred_{}.npy").format(step),
-                        segs[saved_idx],
+                        pred,
                         allow_pickle=False)
                     np.save(
                         os.path.join(vis_dir, "sample_gt_{}.npy").format(step),
-                        labels_batch[saved_idx],
+                        seg,
                         allow_pickle=False)
                     np.save(
                         os.path.join(vis_dir, "sample_tar_{}.npy").format(step),
@@ -1063,7 +1091,7 @@ def evaluation(dataset_dir,
                         allow_pickle=False)
                     np.save(
                         os.path.join(vis_dir, "sample_im_{}.npy").format(step),
-                        images_batch[saved_idx],
+                        im,
                         allow_pickle=False)
 
                     # normalized images

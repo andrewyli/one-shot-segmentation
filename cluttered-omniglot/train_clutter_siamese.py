@@ -14,7 +14,7 @@ TEST_SIZE = 1480
 BATCH_SIZE = 10
 BLOCK_SIZE = 50
 LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
-VISUALIZE = False
+VISUALIZE = True
 
 
 # DATASET_DIR = os.path.join(
@@ -45,7 +45,7 @@ def train():
                    block_size=BLOCK_SIZE,
                    feature_maps=24,
                    batch_size=BATCH_SIZE,
-                   learning_rate=0.00005,
+                   learning_rate=0.00002,
                    maximum_number_of_steps=0)
 
 def evaluate():
