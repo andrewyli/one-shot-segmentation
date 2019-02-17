@@ -9,8 +9,8 @@ DATASET_DIR = os.path.join(
     "mask-net"
 )
 FOLD_NUM = 2
-SET_NAME = "test-one-shot"
-SET_SIZE = 1480
+SET_NAME = "train"
+SET_SIZE = 258700
 BLOCK_SIZE = 50
 
 num_blocks = SET_SIZE // BLOCK_SIZE
@@ -33,4 +33,4 @@ for block_idx in tqdm(range(num_blocks)):
     tar_block[tar_block == 255] = 1
 
     np.save(get_path("segmentation", block_idx), seg_block)
-    np.save(get_path("segmentation", block_idx), tar_block)
+    np.save(get_path("target", block_idx), tar_block)

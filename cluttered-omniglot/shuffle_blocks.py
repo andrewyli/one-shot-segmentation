@@ -9,10 +9,10 @@ DATASET_DIR = os.path.join(
     "mask-net"
 )
 FOLD_NUM = 0
-SET_NAME = "train"
+SET_NAME = "test-one-shot"
 SET_SIZE = 258700
 BLOCK_SIZE = 50
-NUM_SHUFFLE = 26
+NUM_SHUFFLE = 14
 num_ims = NUM_SHUFFLE * BLOCK_SIZE
 
 # write params
@@ -21,7 +21,6 @@ write_path = os.path.join(DATASET_DIR, "fold_{:04d}".format(WRITE_FOLD_NUM), SET
 
 # constructed params
 base_path = os.path.join(DATASET_DIR, "fold_{:04d}".format(FOLD_NUM), SET_NAME)
-set_path = os.path.join(base_path, SET_NAME)
 num_blocks = SET_SIZE // BLOCK_SIZE
 
 # tracking idxs
