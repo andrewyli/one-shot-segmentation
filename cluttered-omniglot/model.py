@@ -940,7 +940,7 @@ def evaluation(dataset_dir,
     with tf.Graph().as_default():
 
         #Define logging parameters
-        OSEG_CKPT_FILE = logdir + 'Run_Epoch2_Step60000.ckpt'
+        OSEG_CKPT_FILE = logdir + 'Run.ckpt'
 
         perms = np.random.permutation(test_size // block_size)
 
