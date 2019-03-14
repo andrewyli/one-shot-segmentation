@@ -12,6 +12,9 @@ from tqdm import tqdm
 import pprint
 import json
 
+cpu_cores = [8, 9] # Cores (numbered 0-11)
+os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.getpid()))
+
 # input directories
 AMODAL_MASK_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/dataset"
 SCENE_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/phoxi/depth_ims"
@@ -19,7 +22,7 @@ JSON_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/phoxi/color_ims"
 MASK_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/phoxi/modal_segmasks"
 
 # output directories
-OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_0000"
+OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_0001"
 mkdir_if_missing(OUT_DIR)
 mkdir_if_missing(os.path.join(OUT_DIR, "train"))
 mkdir_if_missing(os.path.join(OUT_DIR, "val-train"))
@@ -31,20 +34,17 @@ mkdir_if_missing(os.path.join(OUT_DIR, "test-one-shot"))
 NUM_IMS = 400
 
 # original image shape
-IM_WIDTH = 772
-IM_HEIGHT = 1032
-
+IM_WIDTH = 1032
+IM_HEIGHT = 772
 
 # 1:3 ratio between im_size and tar_size
 IM_SIZE = 384
 TAR_SIZE = 128
 
 # Image distortion
-ANGLE = 100
-SHEAR = 4
+ANGLE = 0
+SHEAR = 0
 
-# For storage purposes
-BLOCK_SIZE = 500
 
 def rot_x(phi, theta, ptx, pty):
     return np.cos(phi+theta)*ptx + np.sin(phi-theta)*pty
@@ -92,11 +92,20 @@ def bbox(im):
 
 
 def make_target(modal_mask, angle=0, shear=0, scale=1):
-    # make target image
+    # make target image by cropping
+    # formula: use the bigger bounding box length plus half of the smaller
+    # margin between the edge of the image and the bbox
     transformed_mask = prepare_img(modal_mask, angle, shear, scale)
     top, bot, left, right = bbox(transformed_mask)
     obj_size = max(bot - top, right - left)
-    margin = max((TAR_SIZE * 2 - obj_size) // 2, 0)
+    if bot - top > right - left:
+        right += (bot - top - (right - left)) // 2
+        left -= (bot - top - (right - left)) // 2
+    else:
+        bot += (right - left - (bot - top)) // 2
+        top -= (right - left - (bot - top)) // 2
+    margin = min(top, left, IM_HEIGHT - bot, IM_WIDTH - right)
+
     return cv2.resize(
         transformed_mask[max(0, top - margin):min(transformed_mask.shape[0], bot + margin),
                          max(0, left - margin):min(transformed_mask.shape[1], right + margin)],
@@ -105,15 +114,23 @@ def make_target(modal_mask, angle=0, shear=0, scale=1):
 
 def resize_scene(im):
     if len(im.shape) == 2:
-        im = np.pad(im, (((IM_WIDTH - IM_SIZE) // 2, (IM_WIDTH - IM_SIZE) // 2), (0, 0)), mode="constant")
+        im = np.pad(im, (((IM_WIDTH - IM_HEIGHT) // 2, (IM_WIDTH - IM_HEIGHT) // 2), (0, 0)), mode="constant")
     elif len(im.shape) == 3:
-        im = np.pad(im, (((IM_WIDTH - IM_SIZE) // 2, (IM_WIDTH - IM_SIZE) // 2), (0, 0), (0, 0)), mode="constant")
+        im = np.pad(im, (((IM_WIDTH - IM_HEIGHT) // 2, (IM_WIDTH - IM_HEIGHT) // 2), (0, 0), (0, 0)), mode="constant")
     else:
         raise Exception("image dimensions not valid for scene/ground truth, shape: {}".format(im.shape))
     return cv2.resize(
         im,
         (IM_SIZE, IM_SIZE),
         interpolation=cv2.INTER_NEAREST)
+
+
+# Looping through all image indices
+#   Looping through all labels in the json list
+#     Get the name
+#     Get the target file corresponding to the name
+#     Add the image to the batch
+#     Process the segmask from modal_segmasks
 
 # Looping through all image indices
 #   Looping through all labels in the json list
@@ -131,16 +148,11 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
     mask_path = os.path.join(MASK_DIR, "image_{:06d}.png".format(idx))
 
     # read and blockify scene
-    scene_im = io.imread(scene_path, as_gray=True)
+    scene_im = io.imread(scene_path)
     scene_im = resize_scene(scene_im)
 
-    # triplicate the scene (384, 384) --> (384, 384, 3)
-    scene_im = np.stack([scene_im, scene_im, scene_im], axis=2)
-
-    scene_im = np.expand_dims(scene_im, axis=0)
-
     # for modal masks
-    joint_mask = io.imread(mask_path, as_gray=True)
+    joint_mask = io.imread(mask_path)
     for label in json_file["labels"]:
         target_name = label["label_class"]
         target_id = label["object_id"]
@@ -148,35 +160,26 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
                                    "image_{:06d}".format(idx),
                                    "{}.png".format(target_name))
         try:
-            target_im = io.imread(target_path, as_gray=True)
-            amodal_mask = make_target(target_im, angle=0, shear=0)
-            amodal_mask[amodal_mask > 0] = 1.0
-            """print(np.unique(amodal_mask))
-            plt.imshow(amodal_mask)
-            plt.show()"""
+            target_im = io.imread(target_path)
+            # get first (basically equivalent slice)
+            target_im = target_im[:, :, 0]
+            amodal_mask = make_target(target_im, ANGLE, SHEAR)
+            amodal_mask[amodal_mask > 0] = 1
         except:
             continue
 
         modal_mask = np.copy(joint_mask)
         modal_mask[modal_mask != target_id] = 0
         modal_mask = resize_scene(modal_mask)
-        modal_mask[modal_mask > 0] = 1.0
+        modal_mask[modal_mask > 0] = 1
         data_count += 1
 
-        """plt.imshow(scene_im[0])
-        plt.show()
-        plt.imshow(modal_mask)
-        plt.show()
-        plt.imshow(amodal_mask)
-        plt.show()"""
-
-        # triplicate the amodal mask (128, 128) --> (128, 128, 3)
-        amodal_mask = np.stack([amodal_mask, amodal_mask, amodal_mask], axis=2)
-
-        # create 1-sized blocks
-        amodal_mask = np.expand_dims(amodal_mask, axis=0)
-        modal_mask = np.expand_dims(modal_mask, axis=2)
-        modal_mask = np.expand_dims(modal_mask, axis=0)
+        # plt.imshow(scene_im)
+        # plt.show()
+        # plt.imshow(modal_mask)
+        # plt.show()
+        # plt.imshow(amodal_mask)
+        # plt.show()
 
         """print(modal_mask.shape)
         print(amodal_mask.shape)
@@ -188,33 +191,33 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
         print(amodal_mask.dtype)
         print(scene_im.dtype)"""
 
-        np.save(os.path.join(
+        io.imsave(os.path.join(
             OUT_DIR,
             "test-train/",
-            "image_{:08d}.npy".format(meta_idx)),
+            "image_{:08d}.png".format(meta_idx)),
                scene_im)
-        np.save(os.path.join(
+        io.imsave(os.path.join(
             OUT_DIR,
             "test-train/",
-            "segmentation_{:08d}.npy".format(meta_idx)),
+            "segmentation_{:08d}.png".format(meta_idx)),
                modal_mask)
-        np.save(os.path.join(
+        io.imsave(os.path.join(
             OUT_DIR,
             "test-train/",
-            "target_{:08d}.npy".format(meta_idx)),
+            "target_{:08d}.png".format(meta_idx)),
                amodal_mask)
-        np.save(os.path.join(
+        io.imsave(os.path.join(
             OUT_DIR,
             "test-one-shot/",
-            "image_{:08d}.npy".format(meta_idx)),
+            "image_{:08d}.png".format(meta_idx)),
                scene_im)
-        np.save(os.path.join(
+        io.imsave(os.path.join(
             OUT_DIR,
             "test-one-shot/",
-            "segmentation_{:08d}.npy".format(meta_idx)),
+            "segmentation_{:08d}.png".format(meta_idx)),
                modal_mask)
-        np.save(os.path.join(
+        io.imsave(os.path.join(
             OUT_DIR,
             "test-one-shot/",
-            "target_{:08d}.npy".format(meta_idx)),
+            "target_{:08d}.png".format(meta_idx)),
                amodal_mask)

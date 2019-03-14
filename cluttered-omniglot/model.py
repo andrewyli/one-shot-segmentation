@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+from skimage import io
 import matplotlib.pyplot as plt
 from collections import OrderedDict, deque
 import sys
@@ -38,7 +39,7 @@ def encoder(images, feature_maps=16, dilated=False, reuse=False, scope='encoder'
                             normalizer_fn=slim.layer_norm,
                             normalizer_params={'scale': False},
                             weights_initializer=tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_AVG'),
-                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-7),
+                            weights_regularizer=tf.contrib.layers.l2_regularizer(4e-6),
                             biases_initializer=None,
                             activation_fn=tf.nn.relu):
 
@@ -130,7 +131,7 @@ def decoder(images, encoder_end_points, feature_maps=16, num_classes=2, reuse=Fa
                             normalizer_fn=slim.layer_norm,
                             normalizer_params={'scale': False},
                             weights_initializer=tf.contrib.layers.variance_scaling_initializer(factor=2.0, mode='FAN_AVG'),
-                            weights_regularizer=tf.contrib.layers.l2_regularizer(1e-7),
+                            weights_regularizer=tf.contrib.layers.l2_regularizer(4e-6),
                             activation_fn=tf.nn.relu):
             for layer_name, layer_op in layers.items():
                 net = layer_op(net, layer_name)
@@ -413,21 +414,13 @@ def mask_net(targets, images, labels=None, feature_maps=24, training=False, thre
 #     return np.concatenate(ims_train), np.concatenate(seg_train), np.concatenate(tar_train)
 
 
-def load_train(fold_dir, index, memory_mapping=False):
+def load_train(fold_dir, index):
     path = os.path.join(fold_dir, 'train/')
-    if memory_mapping == True:
-        ims_train = np.load(
-            os.path.join(path, 'image_{:08d}.npy'.format(index)), mmap_mode='r')
-        seg_train = np.load(
-            os.path.join(path, 'segmentation_{:08d}.npy'.format(index)), mmap_mode='r')
-        tar_train = np.load(os.path.join(path, 'target_{:08d}.npy'.format(index)), mmap_mode='r')
-    else:
-        ims_train = np.load(
-            os.path.join(path, 'image_{:08d}.npy'.format(index)))
-        seg_train = np.load(
-            os.path.join(path, 'segmentation_{:08d}.npy'.format(index)))
-        tar_train = np.load(os.path.join(path, 'target_{:08d}.npy'.format(index)))
-
+    ims_train = io.imread(
+        os.path.join(path, 'image_{:08d}.png'.format(index)))
+    seg_train = io.imread(
+        os.path.join(path, 'segmentation_{:08d}.png'.format(index)))
+    tar_train = io.imread(os.path.join(path, 'target_{:08d}.png'.format(index)))
     return ims_train, seg_train, tar_train
 
 
@@ -454,12 +447,11 @@ def load_val(fold_dir, index, subset):
         path = os.path.join(fold_dir, 'val-one-shot')
     else:
         print(subset + ' is not a valid subset')
-    ims_val = np.load(
-        os.path.join(path, 'image_{:08d}.npy'.format(index)))
-    seg_val = np.load(
-        os.path.join(path, 'segmentation_{:08d}.npy'.format(index)))
-    tar_val = np.load(
-        os.path.join(path, 'target_{:08d}.npy'.format(index)))
+    ims_val = io.imread(
+        os.path.join(path, 'image_{:08d}.png'.format(index)))
+    seg_val = io.imread(
+        os.path.join(path, 'segmentation_{:08d}.png'.format(index)))
+    tar_val = io.imread(os.path.join(path, 'target_{:08d}.png'.format(index)))
 
     return ims_val, seg_val, tar_val
 
@@ -486,12 +478,12 @@ def load_test(fold_dir, index, subset):
     else:
         print(subset + ' is not a testid subset')
 
-    ims_test = np.load(
-        os.path.join(path, 'image_{:08d}.npy'.format(index)))
-    seg_test = np.load(
-        os.path.join(path, 'segmentation_{:08d}.npy'.format(index)))
-    tar_test = np.load(
-        os.path.join(path, 'target_{:08d}.npy'.format(index)))
+    ims_test = io.imread(
+        os.path.join(path, 'image_{:08d}.png'.format(index)))
+    seg_test = io.imread(
+        os.path.join(path, 'segmentation_{:08d}.png'.format(index)))
+    tar_test = io.imread(
+        os.path.join(path, 'target_{:08d}.png'.format(index)))
 
     return ims_test, seg_test, tar_test
 
@@ -505,17 +497,15 @@ def threaded_batch_generator(generator, batch_size, max_queue_len=1):
         ims_batch, seg_batch, tar_batch = [], [], []
         index = 0
         for ims, seg, tar in generator:
-            perms = np.random.permutation(ims.shape[0])
-            for i in range(ims.shape[0]):
-                ims_batch.append(ims[perms[i]])
-                seg_batch.append(seg[perms[i]])
-                tar_batch.append(tar[perms[i]])
-                index += 1
-                if index == batch_size:
-                    queue.put((
-                        np.array(ims_batch), np.array(seg_batch), np.array(tar_batch)))
-                    ims_batch, seg_batch, tar_batch = [], [], []
-                    index = 0
+            ims_batch.append(ims)
+            seg_batch.append(np.expand_dims(seg, axis=2))
+            tar_batch.append(np.stack([tar, tar, tar], axis=2))
+            index += 1
+            if index == batch_size:
+                queue.put((
+                    np.array(ims_batch), np.array(seg_batch), np.array(tar_batch)))
+                ims_batch, seg_batch, tar_batch = [], [], []
+                index = 0
         queue.put(sentinel)
 
     thread = threading.Thread(target=producer)
@@ -536,7 +526,7 @@ def block_generator(
         num_blocks,
         perms,
         step=0):
-    """Yields mini-batches for training/testing purposes.
+    """Yields image triples for training/testing purposes.
 
     Args:
       dataset_dir: The direct folder where images/segs/targets are held.
@@ -546,7 +536,7 @@ def block_generator(
     while True:
         index = perms[step]
         if split == "train":
-            im, seg, tar = load_train(dataset_dir, index, modifier)
+            im, seg, tar = load_train(dataset_dir, index)
         if split == "val":
             im, seg, tar = load_val(dataset_dir, index, modifier)
         if split == "test":
@@ -555,30 +545,6 @@ def block_generator(
         # make seg binary
         seg[seg > 0] = 1
         yield im, seg, tar
-        # images_batch = np.zeros((batch_size, IMAGE_DIM, IMAGE_DIM, 3))
-        # labels_batch = np.zeros((batch_size, IMAGE_DIM, IMAGE_DIM, 1))
-        # target_batch = np.zeros((batch_size, TARGET_DIM, TARGET_DIM, 3))
-        # if not multi:
-        #     for i in range(batch_size):
-        #         index = perms[step*batch_size+i]
-        #         # load image based on generator type
-        #         if split == "train":
-        #             im, seg, tar = load_train(dataset_dir, index, modifier)
-        #         if split == "val":
-        #             im, seg, tar = load_val(dataset_dir, index, modifier)
-        #         if split == "test":
-        #             im, seg, tar = load_test(dataset_dir, index, modifier)
-        #         images_batch[i, :, :, :] = im
-        #         labels_batch[i, :, :, :] = seg
-        #         target_batch[i, :, :, :] = tar
-        #     yield images_batch, labels_batch, target_batch
-        #     step += 1
-        # if multi:
-        #     results = Parallel(n_jobs=-1, verbose=0)(delayed(batch_helper)(dataset_dir, split, modifier, batch_size, perms, s) for s in range(step, step + 10))
-        #     example_count = 0
-        #     for i in range(len(results)):
-        #         yield results[i][0], results[i][1], results[i][2]
-        #         step += 1
         step += 1
         if step == num_blocks:
             step = 0
@@ -625,15 +591,14 @@ def training(dataset_dir,
              epochs,
              train_size,
              val_size,
-             block_size,
-             real_size=-1,
              model='siamese-u-net',
              train_mode='encoder_decoder',
              feature_maps=24,
              batch_size=250,
              learning_rate=0.0005,
              pretraining_checkpoint=None,
-             maximum_number_of_steps=0):
+             maximum_number_of_steps=0,
+             real_im_path=None):
 
     # Currently only the siamese-u-net is implemented
     assert model in ['siamese-u-net', 'mask-net']
@@ -641,8 +606,8 @@ def training(dataset_dir,
     print("Drawing from {}".format(dataset_dir))
 
     #Shuffle samples
-    perms = np.random.permutation(train_size // block_size)
-    val_perms = np.random.permutation(val_size // block_size)
+    perms = np.random.permutation(train_size)
+    val_perms = np.random.permutation(val_size)
     real_perms = np.random.permutation(6000)
 
     with tf.Graph().as_default():
@@ -663,9 +628,9 @@ def training(dataset_dir,
         # max_steps for epoch training
         # num_blocks for loading block data
         max_train_steps = train_size // batch_size
-        num_train_blocks = train_size // block_size
+        num_train_blocks = train_size
         max_val_steps = val_size // batch_size
-        num_val_blocks = val_size // block_size
+        num_val_blocks = val_size
 
         if maximum_number_of_steps != 0:
             print('Going to run for %.d steps'%(np.min([epochs * max_train_steps, maximum_number_of_steps])))
@@ -680,25 +645,30 @@ def training(dataset_dir,
         sample_generator = block_generator(dataset_dir,
                                            split="train",
                                            modifier=False,
-                                           num_blocks=10,
+                                           num_blocks=1000,
                                            perms=perms)
-        for i in range((1000 // block_size) + 1):
+        # make this the average percentage of the segmentation compared to the whole screen
+        active_frac = 0.0
+        for i in range(1000):
             sample = next(sample_generator)
-            im_block, _, tar_block = sample
+            im_block, seg, tar_block = sample
             sample_im_batch.append(im_block)
+            active_frac += np.sum(seg) / seg.shape[0] / seg.shape[1]
+        active_frac /= 1000
+        print("Found active_frac to be {}.".format(active_frac))
 
         mean = np.mean(np.array(sample_im_batch))
         std = np.std(np.array(sample_im_batch))
 
         #generate tensorflow placeholders and variables
-        images = tf.placeholder(tf.float32, shape=[batch_size,im_block.shape[1],im_block.shape[2],3], name='images')
-        labels = tf.placeholder(tf.int32, shape=[batch_size,im_block.shape[1],im_block.shape[2],1], name='labels')
-        targets = tf.placeholder(tf.float32, shape=[batch_size,tar_block.shape[1],tar_block.shape[2],3], name='targets')
+        images = tf.placeholder(tf.float32, shape=[batch_size,im_block.shape[0],im_block.shape[1],3], name='images')
+        labels = tf.placeholder(tf.int32, shape=[batch_size,im_block.shape[0],im_block.shape[1],1], name='labels')
+        targets = tf.placeholder(tf.float32, shape=[batch_size,tar_block.shape[0],tar_block.shape[1],3], name='targets')
         learn_rate = tf.Variable(learning_rate)
 
         # preprocess images
-        targets = (targets - mean)/std
-        images = (images - mean)/std
+        # targets = (targets - mean)/std
+        # images = (images - mean)/std
 
         #get predictions
         if model == 'siamese-u-net':
@@ -723,10 +693,15 @@ def training(dataset_dir,
             epsilon = 0.0001
             loss_true = -tf.reduce_mean(score_labels*tf.log(scores+epsilon))
             loss_false = -tf.reduce_mean((1-score_labels)*tf.log(1-scores+epsilon))
-            main_loss = loss_true + loss_false
+            main_loss = loss_true + loss_false * active_frac
             reg_loss = tf.add_n(tf.losses.get_regularization_losses(scope='discriminator'))
         else:
-            main_loss = tf.losses.sparse_softmax_cross_entropy(labels=final_labels, logits=segmentations, scope='losses')
+            # epsilon = 0.0001
+            # loss_true = tf.reduce_mean(tf.cast(final_labels, "float32") * -tf.log(segmentations + epsilon))
+            # loss_false = tf.reduce_mean(tf.cast(1 - final_labels, "float32") * -tf.log((1 - segmentations + epsilon)))
+            # main_loss = loss_true + loss_false * active_frac
+            # main_loss = tf.losses.sparse_softmax_cross_entropy(labels=final_labels, logits=segmentations, scope='losses')
+            main_loss = tf.nn.weighted_cross_entropy_with_logits(labels=final_labels, logits=segmentations, scope='losses')
             reg_loss = tf.add_n(tf.losses.get_regularization_losses())
         loss = main_loss + reg_loss
 
@@ -803,16 +778,14 @@ def training(dataset_dir,
                 num_blocks=num_val_blocks,
                 perms=val_perms), batch_size)
 
-        # get a batch of real images to eval on, delete this later when you clean up
-        real_im_path = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_0000/"
-
-        real_eval_generator = threaded_batch_generator(
-            block_generator(
-                real_im_path,
-                split="test",
-                modifier="eval",
-                num_blocks=6000,
-                perms=real_perms), batch_size)
+        if real_im_path:
+            real_eval_generator = threaded_batch_generator(
+                block_generator(
+                    real_im_path,
+                    split="test",
+                    modifier="eval",
+                    num_blocks=6000,
+                    perms=real_perms), batch_size)
 
         print("Beginning session")
 
@@ -824,7 +797,8 @@ def training(dataset_dir,
             summary_writer_val_eval = tf.summary.FileWriter(logdir + 'val_eval')
 
             # real image writer, can delete later
-            summary_writer_real_eval = tf.summary.FileWriter(logdir + 'real_eval')
+            if real_im_path:
+                summary_writer_real_eval = tf.summary.FileWriter(logdir + 'real_eval')
 
 
             #Initialize from scratch or finetune from previous training
@@ -843,10 +817,9 @@ def training(dataset_dir,
             for epoch in range(epochs):
                 print("Epoch {}/{}".format(epoch + 1, epochs))
                 print("Training for {} steps".format(max_train_steps))
-                #Learning rate schelude
-                # if epoch == epochs//2 or epoch == 3*epochs//4 or epoch == 7*epochs//8:
-                if len(losses) > 0 and max(losses) - min(losses) < 0.001:
-                    learning_rate = learning_rate/2
+                #Learning rate schedule
+                if epoch % 4 == 3:
+                    learning_rate = learning_rate / 2
                     print('lowering learning rate to %.4f'%(learning_rate))
                 losses = []
                 #Run trainings step
@@ -897,14 +870,15 @@ def training(dataset_dir,
                         summary_writer_val_eval.add_summary(summary_str, step_count)
                         summary_writer_val_eval.flush()
 
-                        #evaluate real images, can delete later
-                        images_batch, labels_batch, target_batch = next(real_eval_generator)
-                        summary_str = sess.run(summary, feed_dict={targets: target_batch,
-                                                                   images: images_batch,
-                                                                   labels: labels_batch})
+                        if real_im_path:
+                            #evaluate real images, can delete later
+                            images_batch, labels_batch, target_batch = next(real_eval_generator)
+                            summary_str = sess.run(summary, feed_dict={targets: target_batch,
+                                                                       images: images_batch,
+                                                                       labels: labels_batch})
 
-                        summary_writer_real_eval.add_summary(summary_str, step_count)
-                        summary_writer_real_eval.flush()
+                            summary_writer_real_eval.add_summary(summary_str, step_count)
+                            summary_writer_real_eval.flush()
 
 
 
@@ -926,7 +900,6 @@ def training(dataset_dir,
 def evaluation(dataset_dir,
                logdir,
                test_size,
-               block_size,
                model='siamese-u-net',
                feature_maps=24,
                batch_size=250,
@@ -940,9 +913,9 @@ def evaluation(dataset_dir,
     with tf.Graph().as_default():
 
         #Define logging parameters
-        OSEG_CKPT_FILE = logdir + 'Run.ckpt'
+        OSEG_CKPT_FILE = logdir + 'Run_Epoch9_Step209600.ckpt'
 
-        perms = np.random.permutation(test_size // block_size)
+        perms = np.random.permutation(test_size)
 
         # #Load dataset
         # print('Loading dataset: ' + dataset_dir)
@@ -953,7 +926,7 @@ def evaluation(dataset_dir,
         #Define training parameters
         batch_size = batch_size
         max_steps = test_size // batch_size
-        num_blocks = test_size // block_size
+        num_blocks = test_size
 
         # Get dataset information and statistics
         # Generate batch for this purpose
@@ -963,17 +936,17 @@ def evaluation(dataset_dir,
         sample_generator = block_generator(dataset_dir,
                                            split="test",
                                            modifier="train",
-                                           num_blocks=10,
+                                           num_blocks=100,
                                            perms=perms)
-        for i in range((10 // block_size) + 1):
+        for i in range(100):
             sample = next(sample_generator)
             im_block, _, tar_block = sample
             sample_im_batch.append(im_block)
 
         mean = np.mean(np.array(sample_im_batch))
         std = np.std(np.array(sample_im_batch))
-        im_block = np.ones((1, 384, 384, 1))
-        tar_block = np.ones((1, 128, 128, 1))
+        im_block = np.zeros((1, 384, 384, 1))
+        tar_block = np.zeros((1, 128, 128, 1))
 
         #generate tensorflow placeholders and variables
         images = tf.placeholder(tf.float32, shape=[batch_size,im_block.shape[1],im_block.shape[2],3], name='images')
@@ -981,8 +954,8 @@ def evaluation(dataset_dir,
         targets = tf.placeholder(tf.float32, shape=[batch_size,tar_block.shape[1],tar_block.shape[2],3], name='targets')
 
         # preprocess images
-        targets = (targets - mean)/std
-        images = (images - mean)/std
+        # targets = (targets - mean)/std
+        # images = (images - mean)/std
 
         #get predictions
         if model == 'siamese-u-net':
@@ -1057,13 +1030,15 @@ def evaluation(dataset_dir,
                 #     break
 
                 if vis and step < 25:
+                    print(np.unique(ims))
                     saved_idx = np.random.choice(batch_size)
-                    im = ims[saved_idx]
+                    im = ims[saved_idx] / 255
                     seg = labels_batch[saved_idx]
                     pred = segs[saved_idx]
                     vis_dir = os.path.join(logdir, "vis/")
                     dataset_utils.mkdir_if_missing(vis_dir)
                     plt.figure(figsize=(15, 15))
+                    print(np.unique(im))
                     plt.imshow(im)
                     plt.imshow(np.ma.masked_where(seg[...,0] == 0, seg[...,0]), cmap="summer")
                     plt.title("Ground Truth Segmask", {"fontsize": 16})
@@ -1092,7 +1067,6 @@ def evaluation(dataset_dir,
                         os.path.join(vis_dir, "sample_im_{}.npy").format(step),
                         im,
                         allow_pickle=False)
-
                     # normalized images
                     np.save(
                         os.path.join(vis_dir, "norm_im_{}.npy").format(step),
