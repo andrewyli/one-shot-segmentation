@@ -22,7 +22,7 @@ JSON_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/phoxi/color_ims"
 MASK_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/phoxi/modal_segmasks"
 
 # output directories
-OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_0001"
+OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_0002"
 mkdir_if_missing(OUT_DIR)
 mkdir_if_missing(os.path.join(OUT_DIR, "train"))
 mkdir_if_missing(os.path.join(OUT_DIR, "val-train"))
@@ -95,7 +95,10 @@ def make_target(modal_mask, angle=0, shear=0, scale=1):
     # make target image by cropping
     # formula: use the bigger bounding box length plus half of the smaller
     # margin between the edge of the image and the bbox
-    transformed_mask = prepare_img(modal_mask, angle, shear, scale)
+
+    # transformed_mask = prepare_img(modal_mask, angle, shear, scale)
+    transformed_mask = modal_mask
+
     top, bot, left, right = bbox(transformed_mask)
     obj_size = max(bot - top, right - left)
     if bot - top > right - left:
@@ -139,6 +142,13 @@ def resize_scene(im):
 #     Add the image to the batch
 #     Process the segmask from modal_segmasks
 
+# Looping through all image indices
+#   Looping through all labels in the json list
+#     Get the name
+#     Get the target file corresponding to the name
+#     Add the image to the batch
+#     Process the segmask from modal_segmasks
+
 data_count = 0
 for meta_idx in tqdm(range(NUM_IMS * 30)):
     idx = meta_idx % NUM_IMS
@@ -163,8 +173,8 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
             target_im = io.imread(target_path)
             # get first (basically equivalent slice)
             target_im = target_im[:, :, 0]
-            amodal_mask = make_target(target_im, ANGLE, SHEAR)
-            amodal_mask[amodal_mask > 0] = 1
+            modal_target = make_target(target_im, ANGLE, SHEAR)
+            modal_target[modal_target > 0] = 1
         except:
             continue
 
@@ -172,14 +182,16 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
         modal_mask[modal_mask != target_id] = 0
         modal_mask = resize_scene(modal_mask)
         modal_mask[modal_mask > 0] = 1
+        if 1 not in modal_mask:
+            continue
         data_count += 1
 
-        # plt.imshow(scene_im)
-        # plt.show()
-        # plt.imshow(modal_mask)
-        # plt.show()
-        # plt.imshow(amodal_mask)
-        # plt.show()
+        """plt.imshow(scene_im)
+        plt.show()
+        plt.imshow(modal_mask)
+        plt.show()
+        plt.imshow(modal_target)
+        plt.show()"""
 
         """print(modal_mask.shape)
         print(amodal_mask.shape)
@@ -199,13 +211,13 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
         io.imsave(os.path.join(
             OUT_DIR,
             "test-train/",
-            "segmentation_{:08d}.png".format(meta_idx)),
+            "modal_segmentation_{:08d}.png".format(meta_idx)),
                modal_mask)
         io.imsave(os.path.join(
             OUT_DIR,
             "test-train/",
-            "target_{:08d}.png".format(meta_idx)),
-               amodal_mask)
+            "modal_target_{:08d}.png".format(meta_idx)),
+               modal_target)
         io.imsave(os.path.join(
             OUT_DIR,
             "test-one-shot/",
@@ -214,10 +226,10 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
         io.imsave(os.path.join(
             OUT_DIR,
             "test-one-shot/",
-            "segmentation_{:08d}.png".format(meta_idx)),
+            "modal_segmentation_{:08d}.png".format(meta_idx)),
                modal_mask)
         io.imsave(os.path.join(
             OUT_DIR,
             "test-one-shot/",
-            "target_{:08d}.png".format(meta_idx)),
-               amodal_mask)
+            "modal_target_{:08d}.png".format(meta_idx)),
+               modal_target)

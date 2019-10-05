@@ -14,9 +14,13 @@ import pprint
 
 cpu_cores = [10, 11] # Cores (numbered 0-11)
 os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.getpid()))
+# leave false to activate actual code instead of just displaying (notebook has it True)
+DISPLAY_ONLY = False
+
 
 DATASET_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-block-npy"
-OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net/fold_0003"
+FOLD_NUM = 5
+OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net/fold_{:04d}".format(FOLD_NUM)
 mkdir_if_missing(OUT_DIR)
 mkdir_if_missing(os.path.join(OUT_DIR, "train"))
 mkdir_if_missing(os.path.join(OUT_DIR, "val-train"))
@@ -89,19 +93,20 @@ def make_target(modal_mask, angle=0, shear=0, scale=1):
     # make target image by cropping
     # formula: use the bigger bounding box length plus half of the smaller
     # margin between the edge of the image and the bbox
-    transformed_mask = prepare_img(modal_mask, angle, shear, scale)
-    # plt.figure()
-    # plt.title("{}-{}".format(im_idx, mask_idx), {"fontsize": 20})
-    # plt.imshow(transformed_mask)
+
+    # transformed_mask = prepare_img(modal_mask, angle, shear, scale)
+    transformed_mask = modal_mask
+    """plt.figure()
+    plt.title("{}-{}".format(im_idx, mask_idx), {"fontsize": 20})
+    plt.imshow(transformed_mask)"""
     top, bot, left, right = bbox(transformed_mask)
     if bot - top > right - left:
         right += (bot - top - (right - left)) // 2
         left -= (bot - top - (right - left)) // 2
     else:
-        bot += (right - left - (bot - top)) // 2x
+        bot += (right - left - (bot - top)) // 2
         top -= (right - left - (bot - top)) // 2
     margin = min(top, left, transformed_mask.shape[0] - bot, transformed_mask.shape[1] - right)
-
 
     target = cv2.resize(
         transformed_mask[max(0, top - margin):min(transformed_mask.shape[0], bot + margin),
@@ -146,28 +151,55 @@ for im_idx in tqdm(range(NUM_IMS)):
         "image_{:06d}.png".format(im_idx))
     im = io.imread(im_path)
     im = resize_scene(im)
+
     for mask_idx in range(11):
         channel_name = "image_{:06d}_channel_{:03d}.png".format(im_idx, mask_idx)
         amodal_path = os.path.join(
             DATASET_DIR,
             "amodal_segmasks",
             channel_name)
-        amodal_mask = io.imread(amodal_path)
+        amodal_image = io.imread(amodal_path)
+        amodal_mask = resize_scene(amodal_image)
+        amodal_mask[amodal_mask > 0] = 1
 
-        # if there is no amodal mask, object doesn't exist.
-        try:
-            amodal_mask = make_target(amodal_mask, angle=ANGLE, shear=SHEAR)
-            amodal_mask[amodal_mask > 0] = 1
-        except:
-            break
-        data_count += 1
         modal_path = os.path.join(
             DATASET_DIR,
             "modal_segmasks",
             channel_name)
-        modal_mask = io.imread(modal_path)
-        modal_mask = resize_scene(modal_mask)
+        modal_image = io.imread(modal_path)
+        modal_mask = resize_scene(modal_image)
         modal_mask[modal_mask > 0] = 1
+
+        # make sure the object is modally visible
+        if 1 not in modal_mask:
+            continue
+
+        # if there is no amodal mask, object doesn't exist.
+        try:
+            amodal_target = make_target(amodal_image, angle=ANGLE, shear=SHEAR)
+            amodal_target[amodal_target > 0] = 1
+
+            # in case of modal->modal segmentation
+            modal_target = make_target(modal_image, angle=ANGLE, shear=SHEAR)
+            modal_target[modal_target > 0] = 1
+        except:
+            continue
+
+        data_count += 1
+
+        if DISPLAY_ONLY:
+            print("{}-{}".format(im_idx, mask_idx))
+            plt.figure()
+            plt.imshow(im)
+            plt.figure()
+            plt.imshow(amodal_mask)
+            plt.figure()
+            plt.imshow(modal_mask)
+            plt.figure()
+            plt.imshow(amodal_target)
+            plt.figure()
+            plt.imshow(modal_target)
+            continue
 
         if im_idx in train_indices:
             io.imsave(os.path.join(
@@ -178,13 +210,23 @@ for im_idx in tqdm(range(NUM_IMS)):
             io.imsave(os.path.join(
                 OUT_DIR,
                 "train/",
-                "segmentation_{:08d}.png".format(train_counter)),
+                "amodal_segmentation_{:08d}.png".format(train_counter)),
+                      amodal_mask)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                "train/",
+                "modal_segmentation_{:08d}.png".format(train_counter)),
                    modal_mask)
             io.imsave(os.path.join(
                 OUT_DIR,
                 "train/",
-                "target_{:08d}.png".format(train_counter)),
-                   amodal_mask)
+                "amodal_target_{:08d}.png".format(train_counter)),
+                      amodal_target)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                "train/",
+                "modal_target_{:08d}.png".format(train_counter)),
+                   modal_target)
             train_counter += 1
 
         elif im_idx in test_indices:
@@ -198,13 +240,23 @@ for im_idx in tqdm(range(NUM_IMS)):
             io.imsave(os.path.join(
                 OUT_DIR,
                 test_folder,
-                "segmentation_{:08d}.png".format(test_counters[test_folder_idx])),
+                "amodal_segmentation_{:08d}.png".format(test_counters[test_folder_idx])),
+                      amodal_mask)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                test_folder,
+                "modal_segmentation_{:08d}.png".format(test_counters[test_folder_idx])),
                     modal_mask)
             io.imsave(os.path.join(
                 OUT_DIR,
                 test_folder,
-                "target_{:08d}.png".format(test_counters[test_folder_idx])),
-                    amodal_mask)
+                "amodal_target_{:08d}.png".format(test_counters[test_folder_idx])),
+                    amodal_target)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                test_folder,
+                "modal_target_{:08d}.png".format(test_counters[test_folder_idx])),
+                    modal_target)
             test_counters[test_folder_idx] += 1
             test_counter += 1
 print("Data count: {}".format(data_count))
