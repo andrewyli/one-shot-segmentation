@@ -1,6 +1,9 @@
+import numpy as np
 import tensorflow as tf
 
+from scipy import special
 from tensorflow.python.framework import ops
+
 
 def rotation_regularizer(scale, scope=None):
     """Performs custom regularizer.
@@ -53,3 +56,8 @@ def sum_regularizer(regularizer_list, scope=None):
       return math_ops.add_n(regularizer_tensors, name=name)
 
   return sum_reg
+
+
+def softmax(x, axis=None):
+    """Compute softmax values for each sets of scores in x."""
+    return np.exp(x - special.logsumexp(x, axis=axis, keepdims=True))

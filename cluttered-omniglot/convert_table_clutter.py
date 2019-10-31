@@ -1,3 +1,4 @@
+# COPY FROM NOTEBOOK
 import cv2
 import matplotlib
 import matplotlib.pyplot as plt
@@ -12,14 +13,16 @@ from tqdm import tqdm
 import json
 import pprint
 
-cpu_cores = [10, 11] # Cores (numbered 0-11)
-os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.getpid()))
-# leave false to activate actual code instead of just displaying (notebook has it True)
+# Set false to save images instead of displaying them (Default)
 DISPLAY_ONLY = False
 
+# DO NOT COPY FROM NOTEBOOK - OS RELATED
+cpu_cores = [0, 1, 2, 3, 4, 5, 6, 7, 8] # Cores (numbered 0-11)
+os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.getpid()))
 
+# SET FOLD_NUM
 DATASET_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-block-npy"
-FOLD_NUM = 5
+FOLD_NUM = 9
 OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net/fold_{:04d}".format(FOLD_NUM)
 mkdir_if_missing(OUT_DIR)
 mkdir_if_missing(os.path.join(OUT_DIR, "train"))
@@ -28,8 +31,10 @@ mkdir_if_missing(os.path.join(OUT_DIR, "val-one-shot"))
 mkdir_if_missing(os.path.join(OUT_DIR, "test-train"))
 mkdir_if_missing(os.path.join(OUT_DIR, "test-one-shot"))
 
+# COPY FROM NOTEBOOK BUT KEEP NUM_IMS 50000
 # Dataset size
 NUM_IMS = 50000
+NUM_ROTATIONS = 8
 
 # input image size
 IM_HEIGHT = 384
@@ -40,7 +45,7 @@ IM_SIZE = 384
 TAR_SIZE = 128
 
 # Image distortion
-ANGLE = 0
+ANGLE = 180
 SHEAR = 0
 
 
@@ -52,15 +57,16 @@ def rot_y(phi, theta, ptx, pty):
     return -np.sin(phi+theta)*ptx + np.cos(phi-theta)*pty
 
 
-def prepare_img(img, angle=100, shear=2.5, scale=2):
+def prepare_img(img, angle=90, shear=0, scale=None):
     # Apply affine transformations and scale characters for data augmentation
     phi = np.radians(np.random.uniform(-angle, angle))
     theta = np.radians(np.random.uniform(-shear, shear))
-    a = scale**np.random.uniform(-1, 1)
-    b = scale**np.random.uniform(-1, 1)
     (x, y) = img.shape
-    x = a * x
-    y = b * y
+    if scale:
+        a = scale**np.random.uniform(-1, 1)
+        b = scale**np.random.uniform(-1, 1)
+        x = a * x
+        y = b * y
     xextremes = [rot_x(phi, theta, 0, 0), rot_x(phi, theta, 0, y), rot_x(phi, theta, x, 0), rot_x(phi, theta, x, y)]
     yextremes = [rot_y(phi, theta, 0, 0), rot_y(phi, theta, 0, y), rot_y(phi, theta, x, 0), rot_y(phi, theta, x, y)]
     mnx = min(xextremes)
@@ -93,12 +99,8 @@ def make_target(modal_mask, angle=0, shear=0, scale=1):
     # make target image by cropping
     # formula: use the bigger bounding box length plus half of the smaller
     # margin between the edge of the image and the bbox
-
-    # transformed_mask = prepare_img(modal_mask, angle, shear, scale)
-    transformed_mask = modal_mask
-    """plt.figure()
-    plt.title("{}-{}".format(im_idx, mask_idx), {"fontsize": 20})
-    plt.imshow(transformed_mask)"""
+    transformed_mask = prepare_img(modal_mask, angle, shear, scale)
+    # transformed_mask = modal_mask
     top, bot, left, right = bbox(transformed_mask)
     if bot - top > right - left:
         right += (bot - top - (right - left)) // 2
@@ -135,6 +137,7 @@ def resize_scene(im):
 
 
 data_count = 0
+print(DISPLAY_ONLY)
 train_indices = set(np.load(
     os.path.join(DATASET_DIR, "train_indices.npy")))
 test_indices = set(np.load(
@@ -153,110 +156,116 @@ for im_idx in tqdm(range(NUM_IMS)):
     im = resize_scene(im)
 
     for mask_idx in range(11):
-        channel_name = "image_{:06d}_channel_{:03d}.png".format(im_idx, mask_idx)
-        amodal_path = os.path.join(
-            DATASET_DIR,
-            "amodal_segmasks",
-            channel_name)
-        amodal_image = io.imread(amodal_path)
-        amodal_mask = resize_scene(amodal_image)
-        amodal_mask[amodal_mask > 0] = 1
+        for rot in range(NUM_ROTATIONS):
+            channel_name = "image_{:06d}_channel_{:03d}.png".format(im_idx, mask_idx)
+            amodal_path = os.path.join(
+                DATASET_DIR,
+                "amodal_segmasks",
+                channel_name)
+            amodal_image = io.imread(amodal_path)
+            amodal_mask = resize_scene(amodal_image)
+            amodal_mask[amodal_mask > 0] = 1
 
-        modal_path = os.path.join(
-            DATASET_DIR,
-            "modal_segmasks",
-            channel_name)
-        modal_image = io.imread(modal_path)
-        modal_mask = resize_scene(modal_image)
-        modal_mask[modal_mask > 0] = 1
+            modal_path = os.path.join(
+                DATASET_DIR,
+                "modal_segmasks",
+                channel_name)
+            modal_image = io.imread(modal_path)
+            modal_mask = resize_scene(modal_image)
+            modal_mask[modal_mask > 0] = 1
 
-        # make sure the object is modally visible
-        if 1 not in modal_mask:
-            continue
+            # if the object is completely invisible, omit from the dataset
+            if (len(np.unique(modal_mask)) == 1):
+                continue
 
-        # if there is no amodal mask, object doesn't exist.
-        try:
-            amodal_target = make_target(amodal_image, angle=ANGLE, shear=SHEAR)
-            amodal_target[amodal_target > 0] = 1
+            # if there is no amodal mask, object doesn't exist.
+            try:
+                amodal_target = make_target(amodal_mask, angle=ANGLE, shear=SHEAR)
+                amodal_target[amodal_target > 0] = 1
 
-            # in case of modal->modal segmentation
-            modal_target = make_target(modal_image, angle=ANGLE, shear=SHEAR)
-            modal_target[modal_target > 0] = 1
-        except:
-            continue
+                # in case of modal->modal segmentation
+                modal_target = make_target(modal_image, angle=ANGLE, shear=SHEAR)
+                modal_target[modal_target > 0] = 1
+            except:
+                continue
 
-        data_count += 1
+            data_count += 1
 
-        if DISPLAY_ONLY:
-            print("{}-{}".format(im_idx, mask_idx))
-            plt.figure()
-            plt.imshow(im)
-            plt.figure()
-            plt.imshow(amodal_mask)
-            plt.figure()
-            plt.imshow(modal_mask)
-            plt.figure()
-            plt.imshow(amodal_target)
-            plt.figure()
-            plt.imshow(modal_target)
-            continue
 
-        if im_idx in train_indices:
-            io.imsave(os.path.join(
-                OUT_DIR,
-                "train/",
-                "image_{:08d}.png".format(train_counter)),
-                   im)
-            io.imsave(os.path.join(
-                OUT_DIR,
-                "train/",
-                "amodal_segmentation_{:08d}.png".format(train_counter)),
-                      amodal_mask)
-            io.imsave(os.path.join(
-                OUT_DIR,
-                "train/",
-                "modal_segmentation_{:08d}.png".format(train_counter)),
-                   modal_mask)
-            io.imsave(os.path.join(
-                OUT_DIR,
-                "train/",
-                "amodal_target_{:08d}.png".format(train_counter)),
-                      amodal_target)
-            io.imsave(os.path.join(
-                OUT_DIR,
-                "train/",
-                "modal_target_{:08d}.png".format(train_counter)),
-                   modal_target)
-            train_counter += 1
+            if DISPLAY_ONLY:
+                plt.figure()
+                plt.title("scene")
+                plt.imshow(im)
+                plt.figure()
+                plt.title("amodal mask")
+                plt.imshow(amodal_mask)
+                plt.figure()
+                plt.title("modal mask")
+                plt.imshow(modal_mask)
+                plt.figure()
+                plt.title("amodal target")
+                plt.imshow(amodal_target)
+                plt.figure()
+                plt.title("modal target")
+                plt.imshow(modal_target)
+                continue
 
-        elif im_idx in test_indices:
-            test_folder_idx = np.random.choice([0, 1, 2, 3])
-            test_folder = test_folders[test_folder_idx]
-            io.imsave(os.path.join(
-                OUT_DIR,
-                test_folder,
-                "image_{:08d}.png".format(test_counters[test_folder_idx])),
-                    im)
-            io.imsave(os.path.join(
-                OUT_DIR,
-                test_folder,
-                "amodal_segmentation_{:08d}.png".format(test_counters[test_folder_idx])),
-                      amodal_mask)
-            io.imsave(os.path.join(
-                OUT_DIR,
-                test_folder,
-                "modal_segmentation_{:08d}.png".format(test_counters[test_folder_idx])),
-                    modal_mask)
-            io.imsave(os.path.join(
-                OUT_DIR,
-                test_folder,
-                "amodal_target_{:08d}.png".format(test_counters[test_folder_idx])),
-                    amodal_target)
-            io.imsave(os.path.join(
-                OUT_DIR,
-                test_folder,
-                "modal_target_{:08d}.png".format(test_counters[test_folder_idx])),
-                    modal_target)
-            test_counters[test_folder_idx] += 1
-            test_counter += 1
-print("Data count: {}".format(data_count))
+            if im_idx in train_indices:
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    "train/",
+                    "image_{:08d}.png".format(train_counter)),
+                       im)
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    "train/",
+                    "amodal_segmentation_{:08d}.png".format(train_counter)),
+                          amodal_mask)
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    "train/",
+                    "modal_segmentation_{:08d}.png".format(train_counter)),
+                       modal_mask)
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    "train/",
+                    "amodal_target_{:08d}.png".format(train_counter)),
+                          amodal_target)
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    "train/",
+                    "modal_target_{:08d}.png".format(train_counter)),
+                       modal_target)
+                train_counter += 1
+
+            elif im_idx in test_indices:
+                test_folder_idx = np.random.choice([0, 1, 2, 3])
+                test_folder = test_folders[test_folder_idx]
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    test_folder,
+                    "image_{:08d}.png".format(test_counters[test_folder_idx])),
+                        im)
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    test_folder,
+                    "amodal_segmentation_{:08d}.png".format(test_counters[test_folder_idx])),
+                          amodal_mask)
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    test_folder,
+                    "modal_segmentation_{:08d}.png".format(test_counters[test_folder_idx])),
+                        modal_mask)
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    test_folder,
+                    "amodal_target_{:08d}.png".format(test_counters[test_folder_idx])),
+                        amodal_target)
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    test_folder,
+                    "modal_target_{:08d}.png".format(test_counters[test_folder_idx])),
+                        modal_target)
+                test_counters[test_folder_idx] += 1
+                test_counter += 1
+print("Data count for {} images: {}".format(NUM_IMS, data_count))

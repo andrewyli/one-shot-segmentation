@@ -2,15 +2,14 @@ import dataset_utils
 import matplotlib.pyplot as plt
 import numpy as np
 import os
-import scipy
 import siamese_u_net
 import sys
 import tensorflow as tf
 import threading
 import time
+import utils
 
 from queue import Queue
-from scipy import special
 from skimage import io
 from tqdm import tqdm
 
@@ -278,7 +277,6 @@ def calculate_mAP(logdir, IoUs, avg_confs, threshold):
             fp += 1
         precisions.append(tp / (tp + fp))
         recalls.append(tp / pos_count)
-        print(tp, pos_count)
     right_maxes = [i for i in precisions]
     for i in range(len(precisions) - 2, -1, -1):
         right_maxes[i] = max(precisions[i], right_maxes[i + 1])
@@ -574,9 +572,7 @@ def evaluation(dataset_dir,
                max_steps=0,
                vis=False):
 
-    # Currently only the siamese-u-net is implemented
-    assert model in ['siamese-u-net', 'mask-net']
-
+    model = get_model(model_name)
     with tf.Graph().as_default():
         # define logging parameters
         EVAL_CKPT_FILE = log_dir + 'Run.ckpt'
@@ -713,7 +709,7 @@ def evaluation(dataset_dir,
 
                     plt.imshow(im)
                     # softmax confs for heatmap
-                    conf = special.softmax(conf, axis=-1)
+                    conf = utils.softmax(conf, axis=-1)
                     plt.imshow(conf[...,1], cmap="hot")
                     plt.title("Confidence Heatmap", {"fontsize": 16})
                     plt.savefig(os.path.join(vis_dir, "conf_overlay_{}.png").format(step))

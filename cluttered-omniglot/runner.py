@@ -10,21 +10,24 @@ DATASET_DIR = os.path.join(
     "mask-net"
 )
 LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
-FOLD_NUM = 7
+FOLD_NUM = 9
 
 # option for evaluating real images while training sim
 REAL_IM_PATH = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_0002/"
 
 # option for dataset maximum sizes
-TRAIN_SIZE = 214720
-VAL_SIZE = 13279
-TEST_SIZE = 13223
+# TRAIN_SIZE = 214720
+# VAL_SIZE = 13279
+# TEST_SIZE = 13223
+TRAIN_SIZE = 1030779
+TEST_SIZE = 63537
+VAL_SIZE = 64153
 
 # batch size of training/eval
 BATCH_SIZE = 10
 
 # whether to output/save small # of images for viewing
-VISUALIZE = False
+VISUALIZE = True
 
 # training parameters
 LABEL_TYPE = "modal"
@@ -87,5 +90,5 @@ def evaluate():
                        vis=VISUALIZE)
 
 if __name__ == "__main__":
-    train()
-    # evaluate()
+    # train()
+    evaluate()
