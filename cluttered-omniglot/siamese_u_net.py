@@ -19,6 +19,10 @@ class SiameseUNet(Model):
     """A Model class for Siamese U-Net.
     """
 
+    def __init__(self, reg_factor=0.0):
+        self.reg_factor = reg_factor
+
+
     ### Encoder ###
     def encoder(self, images, feature_maps=16, dilated=False, reuse=False, scope='encoder'):
         with tf.variable_scope(scope, reuse=reuse):
@@ -26,7 +30,7 @@ class SiameseUNet(Model):
             end_points = OrderedDict()
             combined_reg = tf.contrib.layers.sum_regularizer([
                 tf.contrib.layers.l2_regularizer(2e-6),
-                utils.rotation_regularizer(1e-4)
+                utils.rotation_regularizer(self.reg_factor)
             ])
             with slim.arg_scope([slim.conv2d],
                                 padding='SAME',

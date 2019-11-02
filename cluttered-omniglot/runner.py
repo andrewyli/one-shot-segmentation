@@ -10,21 +10,25 @@ DATASET_DIR = os.path.join(
     "mask-net"
 )
 LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
-FOLD_NUM = 9
+FOLD_NUM = 11
 
 # option for evaluating real images while training sim
 REAL_IM_PATH = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_0002/"
 
 # option for dataset maximum sizes
-# TRAIN_SIZE = 214720
-# VAL_SIZE = 13279
-# TEST_SIZE = 13223
-TRAIN_SIZE = 1030779
-TEST_SIZE = 63537
-VAL_SIZE = 64153
+# lower-bound single rotation
+TRAIN_SIZE = 200000
+VAL_SIZE = 12500
+TEST_SIZE = 12500
+
+# 4x
+# TRAIN_SIZE = 1030779
+# TEST_SIZE = 63537
+# VAL_SIZE = 64153
 
 # batch size of training/eval
 BATCH_SIZE = 10
+REG_FACTOR = 0.0
 
 # whether to output/save small # of images for viewing
 VISUALIZE = True
@@ -66,7 +70,8 @@ def train():
                      model_name=model_name,
                      feature_maps=24,
                      batch_size=BATCH_SIZE,
-                     learning_rate=0.00005,
+                     learning_rate=0.0001,
+                     regularization_factor=REG_FACTOR,
                      pretraining_checkpoint=logdir if PRETRAINING_CKPT_FILE else None,
                      maximum_number_of_steps=0,
                      real_im_path=REAL_IM_PATH)
@@ -90,5 +95,5 @@ def evaluate():
                        vis=VISUALIZE)
 
 if __name__ == "__main__":
-    # train()
-    evaluate()
+    train()
+    # evaluate()

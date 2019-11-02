@@ -22,8 +22,9 @@ os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.get
 
 # SET FOLD_NUM
 DATASET_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-block-npy"
-FOLD_NUM = 9
+FOLD_NUM = 14
 OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net/fold_{:04d}".format(FOLD_NUM)
+print(OUT_DIR)
 mkdir_if_missing(OUT_DIR)
 mkdir_if_missing(os.path.join(OUT_DIR, "train"))
 mkdir_if_missing(os.path.join(OUT_DIR, "val-train"))

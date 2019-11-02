@@ -21,10 +21,10 @@ slim = tf.contrib.slim
 
 
 """UTILITY FUNCTIONS"""
-def get_model(model_name):
+def get_model(model_name, *args):
     """Get the model given its name."""
     if model_name == "siamese-u-net":
-        return siamese_u_net.SiameseUNet()
+        return siamese_u_net.SiameseUNet(*args)
     else:
         print("Unknown model.")
         exit()
@@ -303,10 +303,11 @@ def training(dataset_dir,
              feature_maps=24,
              batch_size=250,
              learning_rate=0.0005,
+             regularization_factor=0.0,
              pretraining_checkpoint=None,
              maximum_number_of_steps=0,
              real_im_path=None):
-    model = get_model(model_name)
+    model = get_model(model_name, regularization_factor)
     print("Drawing from {}".format(dataset_dir))
 
     #Shuffle samples
@@ -489,9 +490,8 @@ def training(dataset_dir,
                 print("Training for {} steps".format(max_train_steps))
 
                 # learning rate schedule
-                if epoch % 2 == 1:
-                    learning_rate = learning_rate / 2
-                    print('lowering learning rate to %.4f'%(learning_rate))
+                learning_rate = learning_rate / 2
+                print('lowering learning rate to %.4f'%(learning_rate))
 
                 losses = []
                 last_time = time.time()
