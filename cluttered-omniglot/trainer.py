@@ -490,8 +490,9 @@ def training(dataset_dir,
                 print("Training for {} steps".format(max_train_steps))
 
                 # learning rate schedule
-                learning_rate = learning_rate / 2
-                print('lowering learning rate to %.4f'%(learning_rate))
+                if epoch % 2 == 1:
+                    learning_rate = learning_rate / 2
+                    print('lowering learning rate to %.4f'%(learning_rate))
 
                 losses = []
                 last_time = time.time()
