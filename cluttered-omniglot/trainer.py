@@ -303,11 +303,12 @@ def training(dataset_dir,
              feature_maps=24,
              batch_size=250,
              learning_rate=0.0005,
+             dropout=0.0,
              regularization_factor=0.0,
              pretraining_checkpoint=None,
              maximum_number_of_steps=0,
              real_im_path=None):
-    model = get_model(model_name, regularization_factor)
+    model = get_model(model_name, "train", regularization_factor, dropout)
     print("Drawing from {}".format(dataset_dir))
 
     #Shuffle samples
@@ -328,7 +329,7 @@ def training(dataset_dir,
         # Define training parameters
         batch_size = batch_size
         print("Batch size: {}".format(batch_size))
-
+        print("Dropout: {}".format(dropout))
         # max_steps for epoch training
         # num_blocks for loading block data
         max_train_steps = train_size // batch_size
@@ -552,7 +553,7 @@ def training(dataset_dir,
                             summary_writer_real_eval.flush()
 
                     #Create checkpoint
-                    if step % 400 == 0:
+                    if step % 5000 == 0:
                         checkpoint_file = os.path.join(
                             log_dir, 'Run_Epoch{}_Step{}.ckpt'.format(epoch, step))
                         saver.save(sess, checkpoint_file)
@@ -569,14 +570,15 @@ def evaluation(dataset_dir,
                model_name='siamese-u-net',
                feature_maps=24,
                batch_size=250,
+               dropout=0.0,
                threshold=0.3,
                max_steps=0,
                vis=False):
 
-    model = get_model(model_name)
+    model = get_model(model_name, "eval", 0.0, dropout)
     with tf.Graph().as_default():
         # define logging parameters
-        EVAL_CKPT_FILE = log_dir + 'Run.ckpt'
+        EVAL_CKPT_FILE = log_dir + 'Run_Epoch11_Step0.ckpt'# 'Run_Epoch11_Step0.ckpt'
         perms = np.random.permutation(test_size)
 
         # define training parameters
@@ -698,22 +700,27 @@ def evaluation(dataset_dir,
 
                     plt.imshow(im)
                     plt.imshow(np.ma.masked_where(seg[...,0] == 0, seg[...,0]), cmap="summer")
-                    plt.title("Ground Truth Segmask", {"fontsize": 16})
-                    plt.savefig(os.path.join(vis_dir, "gt_overlay_{}.png").format(step))
+                    plt.axis('off')
+                    plt.savefig(
+                        os.path.join(vis_dir, "gt_overlay_{}.png").format(step),
+                        bbox_inches='tight'
+                    )
                     plt.clf()
 
                     plt.imshow(im)
                     plt.imshow(np.ma.masked_where(pred[...,0] == 0, pred[...,0]), cmap="coolwarm")
-                    plt.title("Predicted Segmask", {"fontsize": 16})
-                    plt.savefig(os.path.join(vis_dir, "pred_overlay_{}.png").format(step))
+                    plt.axis('off')
+                    plt.savefig(os.path.join(vis_dir, "pred_overlay_{}.png").format(step),
+                                bbox_inches='tight')
                     plt.clf()
 
                     plt.imshow(im)
                     # softmax confs for heatmap
                     conf = utils.softmax(conf, axis=-1)
                     plt.imshow(conf[...,1], cmap="hot")
-                    plt.title("Confidence Heatmap", {"fontsize": 16})
-                    plt.savefig(os.path.join(vis_dir, "conf_overlay_{}.png").format(step))
+                    plt.axis('off')
+                    plt.savefig(os.path.join(vis_dir, "conf_overlay_{}.png").format(step),
+                                bbox_inches='tight')
                     plt.clf()
 
                     np.save(

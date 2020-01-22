@@ -22,7 +22,7 @@ os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.get
 
 # SET FOLD_NUM
 DATASET_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-block-npy"
-FOLD_NUM = 14
+FOLD_NUM = 21
 OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net/fold_{:04d}".format(FOLD_NUM)
 print(OUT_DIR)
 mkdir_if_missing(OUT_DIR)
@@ -35,7 +35,7 @@ mkdir_if_missing(os.path.join(OUT_DIR, "test-one-shot"))
 # COPY FROM NOTEBOOK BUT KEEP NUM_IMS 50000
 # Dataset size
 NUM_IMS = 50000
-NUM_ROTATIONS = 8
+NUM_ROTATIONS = 1
 
 # input image size
 IM_HEIGHT = 384
@@ -182,6 +182,8 @@ for im_idx in tqdm(range(NUM_IMS)):
             # if there is no amodal mask, object doesn't exist.
             try:
                 amodal_target = make_target(amodal_mask, angle=ANGLE, shear=SHEAR)
+                # capture original object
+                amodal_model = np.copy(amodal_target)
                 amodal_target[amodal_target > 0] = 1
 
                 # in case of modal->modal segmentation
@@ -236,7 +238,12 @@ for im_idx in tqdm(range(NUM_IMS)):
                     OUT_DIR,
                     "train/",
                     "modal_target_{:08d}.png".format(train_counter)),
-                       modal_target)
+                          modal_target)
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    "train/",
+                    "amodal_model_{:08d}.png".format(train_counter)),
+                          amodal_model)
                 train_counter += 1
 
             elif im_idx in test_indices:
@@ -256,17 +263,22 @@ for im_idx in tqdm(range(NUM_IMS)):
                     OUT_DIR,
                     test_folder,
                     "modal_segmentation_{:08d}.png".format(test_counters[test_folder_idx])),
-                        modal_mask)
+                          modal_mask)
                 io.imsave(os.path.join(
                     OUT_DIR,
                     test_folder,
                     "amodal_target_{:08d}.png".format(test_counters[test_folder_idx])),
-                        amodal_target)
+                          amodal_target)
                 io.imsave(os.path.join(
                     OUT_DIR,
                     test_folder,
                     "modal_target_{:08d}.png".format(test_counters[test_folder_idx])),
-                        modal_target)
+                          modal_target)
+                io.imsave(os.path.join(
+                    OUT_DIR,
+                    test_folder,
+                    "amodal_model_{:08d}.png".format(test_counters[test_folder_idx])),
+                          amodal_model)
                 test_counters[test_folder_idx] += 1
                 test_counter += 1
 print("Data count for {} images: {}".format(NUM_IMS, data_count))

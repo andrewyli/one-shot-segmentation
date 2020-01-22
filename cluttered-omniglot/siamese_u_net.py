@@ -19,9 +19,11 @@ class SiameseUNet(Model):
     """A Model class for Siamese U-Net.
     """
 
-    def __init__(self, reg_factor=0.0):
+    def __init__(self, mode="train", reg_factor=0.0, dropout=0.0):
+        self.mode = mode
         self.reg_factor = reg_factor
-
+        self.dropout = dropout
+        print("Initialized model with mode {}.".format(mode))
 
     ### Encoder ###
     def encoder(self, images, feature_maps=16, dilated=False, reuse=False, scope='encoder'):
@@ -76,6 +78,10 @@ class SiameseUNet(Model):
                 if dilated == False:
                     net = slim.avg_pool2d(net, [2, 2], scope='encode7/pool')
                 net = slim.conv2d(net, num_outputs=feature_maps*(2**5), kernel_size=1, scope='encode8/conv3_1')
+
+                # apply dropout
+                net = tf.nn.dropout(net, keep_prob=1-self.dropout)
+
                 end_points['encode8/conv3_1'] = net
 
         return net, end_points
