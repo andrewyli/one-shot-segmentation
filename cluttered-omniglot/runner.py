@@ -10,13 +10,14 @@ DATASET_DIR = os.path.join(
     "mask-net"
 )
 
-# WEIGHTS_FOLDER = "sun_fold13_rot4_reg0_drop0"
+# WEIGHTS_FOLDER = "sun_fold11_rot1_reg0_drop0"
 # LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + WEIGHTS_FOLDER + '/')
 LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
 FOLD_NUM = 11
 REG_FACTOR = 0
-DROPOUT = 0.1
+DROPOUT = 0.0
 BATCH_SIZE = 10
+EVAL_SIZE = 640
 
 # option for evaluating real images while training sim
 REAL_IM_PATH = None # "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_0002/"
@@ -67,6 +68,7 @@ def train():
                      model_name=model_name,
                      feature_maps=24,
                      batch_size=BATCH_SIZE,
+                     eval_size=EVAL_SIZE,
                      learning_rate=0.0001,
                      dropout=DROPOUT,
                      regularization_factor=REG_FACTOR,

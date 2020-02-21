@@ -302,6 +302,7 @@ def training(dataset_dir,
              model_name='siamese-u-net',
              feature_maps=24,
              batch_size=250,
+             eval_size=10,
              learning_rate=0.0005,
              dropout=0.0,
              regularization_factor=0.0,
@@ -322,6 +323,7 @@ def training(dataset_dir,
         # Define logging parameters
         t = time.time()
         if pretraining_checkpoint is not None:
+            print("Continuing from last pretraining checkpoint.")
             PRETRAINING_CKPT_FILE = pretraining_checkpoint + 'Run.ckpt'
         if not tf.gfile.Exists(log_dir):
             tf.gfile.MakeDirs(log_dir)
@@ -410,9 +412,9 @@ def training(dataset_dir,
         mean_IoU = tf.reduce_mean(batch_IoU)
 
         # create summaries
-        tf.summary.scalar('main_loss', main_loss)
-        tf.summary.scalar('regularization_loss', reg_loss)
-        tf.summary.scalar('total_loss', loss)
+        # tf.summary.scalar('main_loss', main_loss)
+        # tf.summary.scalar('regularization_loss', reg_loss)
+        tf.summary.scalar('loss', loss)
         tf.summary.scalar('mean_IoU', mean_IoU)
         tf.summary.scalar('count_IoU', count_IoU)
 
@@ -495,63 +497,78 @@ def training(dataset_dir,
                     learning_rate = learning_rate / 2
                     print('lowering learning rate to %.4f'%(learning_rate))
 
-                losses = []
                 last_time = time.time()
                 for step in range(max_train_steps):
                     images_batch, labels_batch, target_batch = next(train_generator)
-                    _, loss_value, rl = sess.run([train_op, loss, reg_loss],
+                    _, loss_value = sess.run([train_op, loss],
                                              feed_dict = {targets: target_batch,
                                                           images: images_batch,
                                                           labels: labels_batch,
                                                           learn_rate: learning_rate})
-                    new_time = time.time()
-                    duration.append(new_time - last_time)
-                    last_time = new_time
-                    # if step % 5 == 0:
-                    #     print("Regularization loss:", rl)
-                    #     print("Total loss:", loss_value)
-
                     # evaluate
-                    if step % 200 == 0:
-                        #Evaluate and print training error and IoU
-                        summary_str_train, tf_IoU = sess.run([summary, mean_IoU],
-                                                             feed_dict = {targets: target_batch,
-                                                                          images: images_batch,
-                                                                          labels: labels_batch})
-                        summary_writer_train.add_summary(summary_str_train, step)
+                    if step % 1000 == 0:
+                        # average loss/mIoU over several batches
+                        before_eval_time = time.time()
+                        losses, mIoUs = [], []
+                        for eval_step in range(eval_size // batch_size):
+                            images_batch, labels_batch, target_batch = next(train_generator)
+                            tf_IoU, tf_loss = sess.run([mean_IoU, loss],
+                                                       feed_dict = {targets: target_batch,
+                                                                    images: images_batch,
+                                                                    labels: labels_batch})
+                            losses.append(tf_loss)
+                            mIoUs.append(tf_IoU)
+                        avg_loss = np.sum(losses) / len(losses)
+                        avg_mIoU = np.sum(mIoUs) / len(mIoUs)
+
+                        summary_train = tf.Summary()
+                        summary_train.value.add(tag="mIoU", simple_value=avg_mIoU)
+                        summary_train.value.add(tag="loss", simple_value=avg_loss)
+                        summary_writer_train.add_summary(summary_train, step)
                         summary_writer_train.flush()
-                        print('Step %5d: loss = %.4f mIoU: %.3f (%.3f sec)'
-                              % (step, np.mean(loss_value), tf_IoU, np.mean(duration)))
-                        duration = []
-                        losses.append(np.mean(loss_value))
-
-                        #evaluate val_train
-                        images_batch, labels_batch, target_batch = next(val_train_generator)
-                        summary_str = sess.run(summary, feed_dict={targets: target_batch,
-                                                                   images: images_batch,
-                                                                   labels: labels_batch})
-                        summary_writer_val_train.add_summary(summary_str, step)
-                        summary_writer_val_train.flush()
-
+                        print('Step %5d: avg_loss = %.4f avg_mIoU: %.3f (%.3f sec)'
+                              % (step, avg_loss, avg_mIoU, np.mean(duration)))
                         #evaluate val_eval
-                        images_batch, labels_batch, target_batch = next(val_eval_generator)
-                        summary_str = sess.run(summary, feed_dict={targets: target_batch,
-                                                                   images: images_batch,
-                                                                   labels: labels_batch})
+                        losses, mIoUs = [], []
+                        for eval_step in range(eval_size // batch_size):
+                            images_batch, labels_batch, target_batch = next(val_eval_generator)
+                            tf_IoU, tf_loss = sess.run([mean_IoU, loss],
+                                                       feed_dict = {targets: target_batch,
+                                                                    images: images_batch,
+                                                                    labels: labels_batch})
+                            losses.append(tf_loss)
+                            mIoUs.append(tf_IoU)
+                        avg_loss = np.sum(losses) / len(losses)
+                        avg_mIoU = np.sum(mIoUs) / len(mIoUs)
 
-                        summary_writer_val_eval.add_summary(summary_str, step)
+                        summary_val_eval = tf.Summary()
+                        summary_val_eval.value.add(tag="mIoU", simple_value=avg_mIoU)
+                        summary_val_eval.value.add(tag="loss", simple_value=avg_loss)
+                        summary_writer_val_eval.add_summary(summary_val_eval, step)
                         summary_writer_val_eval.flush()
 
                         if real_im_path:
-                            #evaluate real images, can delete later
-                            images_batch, labels_batch, target_batch = next(real_eval_generator)
-                            summary_str = sess.run(summary, feed_dict={targets: target_batch,
-                                                                       images: images_batch,
-                                                                       labels: labels_batch})
+                            losses, mIoUs = [], []
+                            for eval_step in range(eval_size // batch_size):
+                                images_batch, labels_batch, target_batch = next(real_eval_generator)
+                                tf_IoU, tf_loss = sess.run([mean_IoU, loss],
+                                                           feed_dict = {targets: target_batch,
+                                                                        images: images_batch,
+                                                                        labels: labels_batch})
+                                losses.append(tf_loss)
+                                mIoUs.append(tf_IoU)
+                            avg_loss = np.sum(losses) / len(losses)
+                            avg_mIoU = np.sum(mIoUs) / len(mIoUs)
 
-                            summary_writer_real_eval.add_summary(summary_str, step)
+                            summary_real_eval = tf.Summary()
+                            summary_real_eval.value.add(tag="mIoU", simple_value=avg_mIoU)
+                            summary_real_eval.value.add(tag="loss", simple_value=avg_loss)
+                            summary_writer_real_eval.add_summary(summary_real_eval, step)
                             summary_writer_real_eval.flush()
 
+                    new_time = time.time()
+                    duration.append(new_time - last_time)
+                    last_time = new_time
                     #Create checkpoint
                     if step % 5000 == 0:
                         checkpoint_file = os.path.join(

@@ -80,7 +80,10 @@ class SiameseUNet(Model):
                 net = slim.conv2d(net, num_outputs=feature_maps*(2**5), kernel_size=1, scope='encode8/conv3_1')
 
                 # apply dropout
-                net = tf.nn.dropout(net, keep_prob=1-self.dropout)
+                if self.mode == "train":
+                    net = tf.nn.dropout(net, keep_prob=1-self.dropout)
+                else:
+                    net = tf.nn.dropout(net, keep_prob=1.0)
 
                 end_points['encode8/conv3_1'] = net
 

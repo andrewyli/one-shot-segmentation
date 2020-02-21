@@ -12,7 +12,7 @@ from tqdm import tqdm
 import pprint
 import json
 
-cpu_cores = [8, 9] # Cores (numbered 0-11)
+cpu_cores = [0, 1, 2, 3, 4, 5, 6, 7, 8] # Cores (numbered 0-11)
 os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.getpid()))
 
 # input directories
@@ -22,7 +22,8 @@ JSON_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/phoxi/color_ims"
 MASK_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/phoxi/modal_segmasks"
 
 # output directories
-OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_0002"
+FOLD_NUM = 10
+OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_{:04d}".format(FOLD_NUM)
 mkdir_if_missing(OUT_DIR)
 mkdir_if_missing(os.path.join(OUT_DIR, "train"))
 mkdir_if_missing(os.path.join(OUT_DIR, "val-train"))
@@ -42,7 +43,7 @@ IM_SIZE = 384
 TAR_SIZE = 128
 
 # Image distortion
-ANGLE = 0
+ANGLE = 180
 SHEAR = 0
 
 
@@ -58,11 +59,12 @@ def prepare_img(img, angle=100, shear=2.5, scale=2):
     # Apply affine transformations and scale characters for data augmentation
     phi = np.radians(np.random.uniform(-angle, angle))
     theta = np.radians(np.random.uniform(-shear, shear))
-    a = scale**np.random.uniform(-1, 1)
-    b = scale**np.random.uniform(-1, 1)
     (x, y) = img.shape
-    x = a * x
-    y = b * y
+    if scale:
+        a = scale**np.random.uniform(-1, 1)
+        b = scale**np.random.uniform(-1, 1)
+        x = a * x
+        y = b * y
     xextremes = [rot_x(phi, theta, 0, 0), rot_x(phi, theta, 0, y), rot_x(phi, theta, x, 0), rot_x(phi, theta, x, y)]
     yextremes = [rot_y(phi, theta, 0, 0), rot_y(phi, theta, 0, y), rot_y(phi, theta, x, 0), rot_y(phi, theta, x, y)]
     mnx = min(xextremes)
@@ -95,25 +97,29 @@ def make_target(modal_mask, angle=0, shear=0, scale=1):
     # make target image by cropping
     # formula: use the bigger bounding box length plus half of the smaller
     # margin between the edge of the image and the bbox
-
-    # transformed_mask = prepare_img(modal_mask, angle, shear, scale)
-    transformed_mask = modal_mask
-
+    transformed_mask = prepare_img(modal_mask, angle, shear, scale)
+    # transformed_mask = modal_mask
     top, bot, left, right = bbox(transformed_mask)
-    obj_size = max(bot - top, right - left)
     if bot - top > right - left:
         right += (bot - top - (right - left)) // 2
         left -= (bot - top - (right - left)) // 2
     else:
         bot += (right - left - (bot - top)) // 2
         top -= (right - left - (bot - top)) // 2
-    margin = min(top, left, IM_HEIGHT - bot, IM_WIDTH - right)
+    margin = min(top, left, transformed_mask.shape[0] - bot, transformed_mask.shape[1] - right)
 
-    return cv2.resize(
+    target = cv2.resize(
         transformed_mask[max(0, top - margin):min(transformed_mask.shape[0], bot + margin),
                          max(0, left - margin):min(transformed_mask.shape[1], right + margin)],
         (TAR_SIZE, TAR_SIZE),
         interpolation=cv2.INTER_NEAREST)
+    # in the case we have a very zoomed in object, fix that
+    if margin < 20:
+        padded_target = np.zeros((target.shape[0] + 40, target.shape[1] + 40))
+        padded_target[20:padded_target.shape[0] - 20, 20:padded_target.shape[1] - 20] = target
+        return cv2.resize(padded_target, (TAR_SIZE, TAR_SIZE), interpolation=cv2.INTER_NEAREST)
+    return target
+
 
 def resize_scene(im):
     if len(im.shape) == 2:
@@ -186,6 +192,9 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
             continue
         data_count += 1
 
+        # really, all these masks are amodal
+        amodal_target = modal_target
+
         """plt.imshow(scene_im)
         plt.show()
         plt.imshow(modal_mask)
@@ -220,6 +229,11 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
                modal_target)
         io.imsave(os.path.join(
             OUT_DIR,
+            "test-train/",
+            "amodal_target_{:08d}.png".format(meta_idx)),
+               amodal_target)
+        io.imsave(os.path.join(
+            OUT_DIR,
             "test-one-shot/",
             "image_{:08d}.png".format(meta_idx)),
                scene_im)
@@ -233,3 +247,8 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
             "test-one-shot/",
             "modal_target_{:08d}.png".format(meta_idx)),
                modal_target)
+        io.imsave(os.path.join(
+            OUT_DIR,
+            "test-one-shot/",
+            "amodal_target_{:08d}.png".format(meta_idx)),
+               amodal_target)

@@ -22,7 +22,7 @@ os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.get
 
 # SET FOLD_NUM
 DATASET_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-block-npy"
-FOLD_NUM = 21
+FOLD_NUM = 33
 OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net/fold_{:04d}".format(FOLD_NUM)
 print(OUT_DIR)
 mkdir_if_missing(OUT_DIR)
@@ -33,9 +33,9 @@ mkdir_if_missing(os.path.join(OUT_DIR, "test-train"))
 mkdir_if_missing(os.path.join(OUT_DIR, "test-one-shot"))
 
 # COPY FROM NOTEBOOK BUT KEEP NUM_IMS 50000
-# Dataset size
-NUM_IMS = 50000
-NUM_ROTATIONS = 1
+# Dataset size (OG: 50000, rotations 1)
+NUM_IMS = 12500
+NUM_ROTATIONS = 4
 
 # input image size
 IM_HEIGHT = 384
@@ -148,7 +148,9 @@ train_counter = 0
 test_counter = 0
 test_folders = ["test-train", "test-one-shot", "val-train", "val-one-shot"]
 test_counters = [0 for i in range(4)]
-for im_idx in tqdm(range(NUM_IMS)):
+for c_idx in tqdm(range(NUM_IMS)):
+    # because Wisdom is grouped in sets of five identical images, this will ensure subsets will keep the same number of unique states
+    im_idx = 5 * (c_idx % 10000) + (c_idx // 10000)
     im_path = os.path.join(
         DATASET_DIR,
         "depth_ims",
