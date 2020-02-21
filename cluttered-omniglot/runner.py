@@ -13,9 +13,9 @@ DATASET_DIR = os.path.join(
 # WEIGHTS_FOLDER = "sun_fold11_rot1_reg0_drop0"
 # LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + WEIGHTS_FOLDER + '/')
 LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
-FOLD_NUM = 11
+FOLD_NUM = 13
 REG_FACTOR = 0
-DROPOUT = 0.0
+DROPOUT = 0.5
 BATCH_SIZE = 10
 EVAL_SIZE = 640
 
@@ -24,9 +24,9 @@ REAL_IM_PATH = None # "/nfs/diskstation/projects/dex-net/segmentation/datasets/m
 
 # Option for dataset maximum sizes
 # lower-bound single rotation
-TRAIN_SIZE = 200000
-VAL_SIZE = 12500
-TEST_SIZE = 12500
+TRAIN_SIZE = 800000
+VAL_SIZE = 50000
+TEST_SIZE = 50000
 
 # whether to output/save small # of images for viewing
 VISUALIZE = True
