@@ -178,7 +178,7 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
         try:
             target_im = io.imread(target_path)
             # get first (basically equivalent slice)
-            target_im = target_im[:, :, 0]
+            target_im = np.sum(target_im, axis=2)
             modal_target = make_target(target_im, ANGLE, SHEAR)
             modal_target[modal_target > 0] = 1
         except:

@@ -488,6 +488,7 @@ def training(dataset_dir,
             print('Starting to train')
             duration = []
             losses = []
+            global_step = 0
             for epoch in range(epochs):
                 print("Epoch {}/{}".format(epoch + 1, epochs))
                 print("Training for {} steps".format(max_train_steps))
@@ -524,7 +525,7 @@ def training(dataset_dir,
                         summary_train = tf.Summary()
                         summary_train.value.add(tag="mIoU", simple_value=avg_mIoU)
                         summary_train.value.add(tag="loss", simple_value=avg_loss)
-                        summary_writer_train.add_summary(summary_train, step)
+                        summary_writer_train.add_summary(summary_train, global_step)
                         summary_writer_train.flush()
                         print('Step %5d: avg_loss = %.4f avg_mIoU: %.3f (%.3f sec)'
                               % (step, avg_loss, avg_mIoU, np.mean(duration)))
@@ -544,7 +545,7 @@ def training(dataset_dir,
                         summary_val_eval = tf.Summary()
                         summary_val_eval.value.add(tag="mIoU", simple_value=avg_mIoU)
                         summary_val_eval.value.add(tag="loss", simple_value=avg_loss)
-                        summary_writer_val_eval.add_summary(summary_val_eval, step)
+                        summary_writer_val_eval.add_summary(summary_val_eval, global_step)
                         summary_writer_val_eval.flush()
 
                         if real_im_path:
@@ -563,7 +564,7 @@ def training(dataset_dir,
                             summary_real_eval = tf.Summary()
                             summary_real_eval.value.add(tag="mIoU", simple_value=avg_mIoU)
                             summary_real_eval.value.add(tag="loss", simple_value=avg_loss)
-                            summary_writer_real_eval.add_summary(summary_real_eval, step)
+                            summary_writer_real_eval.add_summary(summary_real_eval, global_step)
                             summary_writer_real_eval.flush()
 
                     new_time = time.time()
@@ -576,6 +577,7 @@ def training(dataset_dir,
                         saver.save(sess, checkpoint_file)
                         checkpoint_file = os.path.join(log_dir, 'Run.ckpt')
                         saver.save(sess, checkpoint_file)
+                    global_step += 1
 
 
 # network evaluation
