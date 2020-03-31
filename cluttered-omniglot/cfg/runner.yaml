@@ -1,0 +1,24 @@
+train: 1
+log_dir: logs/clutter
+model_name: test_fold11
+pretrained: 0
+
+dataset_dir: datasets/mask-net
+fold_num: 11
+train_size: 800000
+val_size: 12500
+test_size: 12500
+label_type: modal
+target_type: amodal
+
+model_type: siamese-u-net
+epochs: 20
+lr: 0.0001
+feature_maps: 24
+reg_factor: 0
+dropout: 0.1
+batch_size: 16
+eval_size: 10
+
+real_im_path: datasets/mask-net-real/fold_0010
+vis: 0

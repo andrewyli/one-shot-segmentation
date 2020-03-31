@@ -1,107 +1,63 @@
-import trainer
+import argparse
 import os
 
-TRAINING = False
-USING_SIM = False
-
-if USING_SIM:
-    model_name = 'siamese-u-net'
-
-    # locations of data and log, including subfolder/iteration
-    DATASET_DIR = os.path.join(
-        "/nfs/diskstation/projects/dex-net/segmentation/datasets/",
-        "mask-net"
-    )
-
-    # WEIGHTS_FOLDER = "sun_fold11_rot1_reg0_drop0"
-    # LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + WEIGHTS_FOLDER + '/')
-    LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
-    FOLD_NUM = 13
-    REG_FACTOR = 0
-    DROPOUT = 0.5
-    BATCH_SIZE = 10
-    EVAL_SIZE = 640
-
-    # option for evaluating real images while training sim
-    REAL_IM_PATH = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_0010/"
-
-    # Option for dataset maximum sizes
-    # lower-bound single rotation
-    TRAIN_SIZE = 800000
-    VAL_SIZE = 50000
-    TEST_SIZE = 50000
-
-    # whether to output/save small # of images for viewing
-    VISUALIZE = True
-
-    # training parameters
-    LABEL_TYPE = "modal"
-    TARGET_TYPE = "amodal"
-    PRETRAINING_CKPT_FILE = False
-else:
-    DATASET_DIR = os.path.join(
-        "/nfs/diskstation/projects/dex-net/segmentation/datasets/",
-        "mask-net-real"
-    )
-    FOLD_NUM = 10
-    TRAIN_SIZE = 0
-    VAL_SIZE = 0
-    TEST_SIZE = 6000
-    BATCH_SIZE = 1
-    BLOCK_SIZE = 1
-    WEIGHTS_FOLDER = "sun_fold13_rot4_reg0_drop0"
-    LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + WEIGHTS_FOLDER + '/')
-    # LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
-    VISUALIZE = True
-    LABEL_TYPE = "modal"
-    TARGET_TYPE = "amodal"
+from autolab_core import YamlConfig
+import trainer
 
 
-def train():
-    print('')
+def train(config):
     datadir = os.path.join(
-        DATASET_DIR, "fold_{:04d}".format(FOLD_NUM))
-    logdir = LOG_DIR
+        config['dataset_dir'], 
+        "fold_{:04d}".format(config['fold_num']))
+    logdir = os.path.join(config['log_dir'], config['model_name'])
+    if not os.path.exists(logdir):
+        os.makedirs(logdir)
 
     trainer.training(datadir,
                      logdir,
-                     epochs=20,
-                     train_size=TRAIN_SIZE,
-                     val_size=VAL_SIZE,
-                     label_type=LABEL_TYPE,
-                     target_type=TARGET_TYPE,
-                     model_name=model_name,
-                     feature_maps=24,
-                     batch_size=BATCH_SIZE,
-                     eval_size=EVAL_SIZE,
-                     learning_rate=0.0001,
-                     dropout=DROPOUT,
-                     regularization_factor=REG_FACTOR,
-                     pretraining_checkpoint=logdir if PRETRAINING_CKPT_FILE else None,
+                     epochs=config['epochs'],
+                     train_size=config['train_size'],
+                     val_size=config['val_size'],
+                     label_type=config['label_type'],
+                     target_type=config['target_type'],
+                     model_name=config['model_type'],
+                     feature_maps=config['feature_maps'],
+                     batch_size=config['batch_size'],
+                     eval_size=config['eval_size'],
+                     learning_rate=config['lr'],
+                     dropout=config['dropout'],
+                     regularization_factor=config['reg_factor'],
+                     pretraining_checkpoint=logdir if config['pretrained'] else None,
                      maximum_number_of_steps=0,
-                     real_im_path=REAL_IM_PATH)
+                     real_im_path=config['real_im_path'])
 
-def evaluate():
-    print('')
+def evaluate(config):
     datadir = os.path.join(
-        DATASET_DIR, "fold_{:04d}".format(FOLD_NUM))
-    logdir = LOG_DIR
+        config['dataset_dir'], "fold_{:04d}".format(FOLD_NUM))
+    logdir = os.path.join(config['log_dir'], config['model_name'])
 
     trainer.evaluation(datadir,
                        logdir,
-                       test_size=TEST_SIZE,
-                       label_type=LABEL_TYPE,
-                       target_type=TARGET_TYPE,
-                       model_name=model_name,
-                       feature_maps=24,
-                       batch_size=BATCH_SIZE,
-                       dropout=DROPOUT,
+                       test_size=config['test_size'],
+                       label_type=config['label_type'],
+                       target_type=config['target_type'],
+                       model_name=config['model_type'],
+                       feature_maps=config['feature_maps'],
+                       batch_size=config['batch_size'],
+                       dropout=config['dropout'],
                        threshold=0.3,
                        max_steps=0,
-                       vis=VISUALIZE)
+                       vis=config['vis'])
 
 if __name__ == "__main__":
-    if TRAINING:
-        train()
+    
+    parser = argparse.ArgumentParser(description='training and evaluation for OSS')
+    parser.add_argument('--cfg', type=str, default='cfg/runner.yaml', help='config file with parameters for eval/training')
+    args = parser.parse_args()
+
+    config = YamlConfig(args.cfg)
+
+    if config['train']:
+        train(config)
     else:
-        evaluate()
+        evaluate(config)

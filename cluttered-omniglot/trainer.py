@@ -368,8 +368,8 @@ def training(dataset_dir,
         active_frac /= 100
         print("Found active_frac to be {}.".format(active_frac))
 
-        # mean = np.mean(np.array(sample_im_batch))
-        # std = np.std(np.array(sample_im_batch))
+        mean = np.mean(np.array(sample_im_batch))
+        std = np.std(np.array(sample_im_batch))
 
         # generate tensorflow placeholders and variables
         images, labels, targets = get_training_placeholders(
@@ -379,8 +379,8 @@ def training(dataset_dir,
         learn_rate = tf.Variable(learning_rate)
 
         # preprocess images
-        # targets = (targets - mean)/std
-        # images = (images - mean)/std
+        targets = (targets - mean)/std
+        images = (images - mean)/std
 
         # call desired network to get segmentations
         segmentations = model.generate_segmentations(
@@ -400,6 +400,7 @@ def training(dataset_dir,
 
         #Training step
         optimizer = tf.train.AdamOptimizer(learn_rate)
+        optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(optimizer)
         global_step = tf.Variable(0, name = 'global_step', trainable = False)
         train_op = optimizer.minimize(loss, global_step=global_step)
 
@@ -621,8 +622,8 @@ def evaluation(dataset_dir,
             im_block, _, tar_block = sample
             sample_im_batch.append(im_block)
 
-        # mean = np.mean(np.array(sample_im_batch))
-        # std = np.std(np.array(sample_im_batch))
+        mean = np.mean(np.array(sample_im_batch))
+        std = np.std(np.array(sample_im_batch))
 
         # generate tensorflow placeholders and variables
         im_block = np.zeros((1, 384, 384, 1))
@@ -633,8 +634,8 @@ def evaluation(dataset_dir,
         )
 
         # preprocess images
-        # targets = (targets - mean)/std
-        # images = (images - mean)/std
+        targets = (targets - mean)/std
+        images = (images - mean)/std
 
         # run network and produce segmentations
         segmentations = model.generate_segmentations(
