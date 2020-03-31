@@ -7,6 +7,7 @@ import os
 
 from autolab_core import TensorDataset
 from dataset_utils import mkdir_if_missing
+from glob import glob
 from PIL import Image
 from skimage import io
 from tqdm import tqdm
@@ -18,12 +19,12 @@ import pprint
 DISPLAY_ONLY = False
 
 # DO NOT COPY FROM NOTEBOOK - OS RELATED
-cpu_cores = [0, 1, 2, 3, 4, 5, 6, 7, 8] # Cores (numbered 0-11)
+cpu_cores = [11] # Cores (numbered 0-11)
 os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.getpid()))
 
 # SET FOLD_NUM
 DATASET_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-raw-output"
-TD_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-raw-tensors/states/"
+TD_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-raw-tensors/"
 ID_MAPPING_PATH = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-raw-tensors/states/metadata.json"
 OBJECT_ID_PATH = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-raw-tensors/states/tensors"
 FOLD_NUM = 40
@@ -40,7 +41,7 @@ mkdir_if_missing(os.path.join(OUT_DIR, "test-one-shot"))
 # COPY FROM NOTEBOOK BUT KEEP NUM_IMS 50000
 # Dataset size (OG: 50000, rotations 1)
 NUM_STATES = 10000
-NUM_ROTATIONS = 1
+NUM_ROTATIONS = 4
 OBJS_PER_SCENE = 10
 NUM_POSES = 5
 
@@ -63,6 +64,13 @@ def rot_x(phi, theta, ptx, pty):
 
 def rot_y(phi, theta, ptx, pty):
     return -np.sin(phi+theta)*ptx + np.cos(phi-theta)*pty
+
+
+def normalize_nonzero_image(im):
+    # normalizes nonzero values in the image
+    # particular to WISDOM data padding
+    center = im[48:-48, :]
+    return im - np.mean(center)
 
 
 def prepare_img(img, angle=90, shear=0, scale=None):
@@ -145,6 +153,7 @@ def resize_scene(im):
 
 
 data_count = 0
+miss_count = 0
 print(DISPLAY_ONLY)
 train_indices = set(np.load(
     os.path.join(DATASET_DIR, "train_indices.npy")))
@@ -165,34 +174,37 @@ test_counters = [0 for i in range(4)]
 with open(ID_MAPPING_PATH) as mapping_file:
     obj_map = json.load(mapping_file)['obj_ids']
 
-dataset = TensorDataset.open(TD_DIR)
+states = TensorDataset.open(os.path.join(TD_DIR, "states"))
+images = TensorDataset.open(os.path.join(TD_DIR, "images"))
 for idx in tqdm(range(NUM_STATES)):
-    point = dataset[idx]
-    # print("Point info:", point['obj_ids'], point["image_start_ind"], point["image_end_ind"])
-    for im_idx in range(point["image_start_ind"], point["image_end_ind"]):
-        im_path = os.path.join(
-            DATASET_DIR,
-            "depth_ims",
-            "image_{:06d}.png".format(im_idx))
-        im = io.imread(im_path)
+    # get objects in state
+    state = states[idx]
+    obj_ids = state['obj_ids']
+    obj_names = [states.metadata['obj_ids'][str(oid)] for oid in obj_ids if oid < np.iinfo(np.uint32).max]
+    # for all images in each state
+    for im_idx in range(state["image_start_ind"], state["image_end_ind"]):
+        try:
+            im_tensor = images[im_idx]
+        except:
+            miss_count += 1
+            continue
+        im = im_tensor['depth_ims']
         im = resize_scene(im)
-        for mask_idx in range(OBJS_PER_SCENE):
+        assert(np.all(im < 1.0001))
+        im = (im * 255).astype(np.uint8)
+
+        # create masks
+        semantic_mask = im_tensor['semantic_segmasks'].squeeze()
+        modal_masks = im_tensor['modal_segmasks']
+        amodal_masks = im_tensor['amodal_segmasks']
+        for mask_idx, name in enumerate(obj_names):
             for rot in range(NUM_ROTATIONS):
                 # create amodal and modal masks
-                channel_name = "image_{:06d}_channel_{:03d}.png".format(im_idx, mask_idx)
-                amodal_path = os.path.join(
-                    DATASET_DIR,
-                    "amodal_segmasks",
-                    channel_name)
-                amodal_image = io.imread(amodal_path)
-                amodal_mask = resize_scene(amodal_image)
-                amodal_mask[amodal_mask > 0] = 1
-
-                modal_path = os.path.join(
-                    DATASET_DIR,
-                    "modal_segmasks",
-                    channel_name)
-                modal_image = io.imread(modal_path)
+                # amodal_image = amodal_masks[:, :, mask_idx]
+                # amodal_mask = resize_scene(amodal_image)
+                # amodal_mask[amodal_mask > 0] = 1
+                modal_image = (semantic_mask == obj_ids[mask_idx]).astype(np.uint8)
+                # modal_image = modal_masks[:, :, mask_idx]
                 modal_mask = resize_scene(modal_image)
                 modal_mask[modal_mask > 0] = 1
 
@@ -200,23 +212,29 @@ for idx in tqdm(range(NUM_STATES)):
                 if (len(np.unique(modal_mask)) == 1):
                     break
 
-                orig_id = point['obj_ids'][mask_idx]
-                obj_tag = obj_map[str(orig_id)]
-                if obj_tag == "environment":
-                    break
-                obj_id = obj_tag.split("~")[1]
-
+                basename = name.split('~')[-1]
                 for pose_idx in range(NUM_POSES):
                     try:
-                        amodal_file = "{}_{:02d}_mask.png".format(obj_id, pose_idx)
+                        amodal_file = "{}_{:02d}_mask.png".format(basename, pose_idx)
                         amodal_im = io.imread(os.path.join(AMODAL_MASK_DIR, amodal_file))
                         # get first (basically equivalent slice)
                         amodal_target = make_target(amodal_im / 255, ANGLE, SHEAR)
                         amodal_target[amodal_target > 0] = 1
-                        # print("{}: im_idx: {}, tensor_idx: {}, mask_idx: {}, orig_id: {}, obj_tag: {}, obj_id: {}, pose_num: {}".format(data_count, im_idx, dataset.tensor_index(idx), mask_idx, orig_id, obj_tag, obj_id, pose_idx))
+                        amodal_target = amodal_target.astype("uint8")
+                        # print("{}: im_idx: {}, tensor_idx: {}, mask_idx: {}, basename: {}, original name: {}, pose_num: {}".format(data_count, im_idx, images.tensor_index(idx), mask_idx, basename, name, pose_idx))
+                    # print(im.dtype, np.unique(im))
+                    # print(modal_mask.dtype, np.unique(modal_mask))
+                    # print(amodal_target.dtype, np.unique(amodal_target))
                     except:
-                        break
+                        miss_count += 1
+                        continue
+
+
                     data_count += 1
+
+                    print(im.dtype, np.unique(im), im.shape, np.count_nonzero(im))
+                    print(modal_mask.dtype, np.unique(modal_mask), modal_mask.shape)
+                    print(amodal_target.dtype, np.unique(amodal_target), amodal_target.shape)
 
                     if DISPLAY_ONLY:
                         plt.figure()
@@ -237,16 +255,21 @@ for idx in tqdm(range(NUM_STATES)):
                         continue
 
                     if im_idx in train_indices:
+                        # DepthImage(im.squeeze()).save(
+                        #     os.path.join(
+                        #     OUT_DIR,
+                        #     "train/",
+                        #     "image_{:08d}.png".format(train_counter)))
                         io.imsave(os.path.join(
                             OUT_DIR,
                             "train/",
                             "image_{:08d}.png".format(train_counter)),
                                im)
-                        io.imsave(os.path.join(
-                            OUT_DIR,
-                            "train/",
-                            "amodal_segmentation_{:08d}.png".format(train_counter)),
-                                  amodal_mask)
+                        # io.imsave(os.path.join(
+                        #     OUT_DIR,
+                        #     "train/",
+                        #     "amodal_segmentation_{:08d}.png".format(train_counter)),
+                        #           amodal_mask)
                         io.imsave(os.path.join(
                             OUT_DIR,
                             "train/",
@@ -267,11 +290,11 @@ for idx in tqdm(range(NUM_STATES)):
                             test_folder,
                             "image_{:08d}.png".format(test_counters[test_folder_idx])),
                                 im)
-                        io.imsave(os.path.join(
-                            OUT_DIR,
-                            test_folder,
-                            "amodal_segmentation_{:08d}.png".format(test_counters[test_folder_idx])),
-                                  amodal_mask)
+                        # io.imsave(os.path.join(
+                        #     OUT_DIR,
+                        #     test_folder,
+                        #     "amodal_segmentation_{:08d}.png".format(test_counters[test_folder_idx])),
+                        #           amodal_mask)
                         io.imsave(os.path.join(
                             OUT_DIR,
                             test_folder,
@@ -284,8 +307,8 @@ for idx in tqdm(range(NUM_STATES)):
                                   amodal_target)
                         test_counters[test_folder_idx] += 1
                         test_counter += 1
-print("Data count for {} images: {}".format(NUM_IMS, data_count))
-
+print("Data count for {} states: {}".format(NUM_STATES, data_count))
+print("Miss count: {}".format(miss_count))
 # for c_idx in range(NUM_IMS):
 #     # because Wisdom is grouped in sets of five identical images, this will ensure subsets will keep the same number of unique states
 #     # im_idx = 5 * (c_idx % 10000) + (c_idx // 10000)

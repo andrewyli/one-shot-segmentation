@@ -12,17 +12,18 @@ from tqdm import tqdm
 import pprint
 import json
 
-cpu_cores = [0, 1, 2, 3, 4, 5, 6, 7, 8] # Cores (numbered 0-11)
+cpu_cores = [0] # Cores (numbered 0-11)
 os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.getpid()))
 
 # input directories
-AMODAL_MASK_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/dataset"
+MODAL_MASK_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/dataset"
+AMODAL_MASK_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/target_images"
 SCENE_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/phoxi/depth_ims"
 JSON_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/phoxi/color_ims"
 MASK_DIR = "/nfs/diskstation/dmwang/labeled_wisdom_real/phoxi/modal_segmasks"
 
 # output directories
-FOLD_NUM = 10
+FOLD_NUM = 21
 OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net-real/fold_{:04d}".format(FOLD_NUM)
 mkdir_if_missing(OUT_DIR)
 mkdir_if_missing(os.path.join(OUT_DIR, "train"))
@@ -32,7 +33,7 @@ mkdir_if_missing(os.path.join(OUT_DIR, "test-train"))
 mkdir_if_missing(os.path.join(OUT_DIR, "test-one-shot"))
 
 # real dataset parameters
-NUM_IMS = 400
+NUM_IMS = 400 # 400
 
 # original image shape
 IM_WIDTH = 1032
@@ -43,7 +44,7 @@ IM_SIZE = 384
 TAR_SIZE = 128
 
 # Image distortion
-ANGLE = 180
+ANGLE = 360
 SHEAR = 0
 
 
@@ -97,7 +98,8 @@ def make_target(modal_mask, angle=0, shear=0, scale=1):
     # make target image by cropping
     # formula: use the bigger bounding box length plus half of the smaller
     # margin between the edge of the image and the bbox
-    transformed_mask = prepare_img(modal_mask, angle, shear, scale)
+    # transformed_mask = prepare_img(modal_mask, angle, shear, scale)
+    transformed_mask = modal_mask
     # transformed_mask = modal_mask
     top, bot, left, right = bbox(transformed_mask)
     if bot - top > right - left:
@@ -156,7 +158,10 @@ def resize_scene(im):
 #     Process the segmask from modal_segmasks
 
 data_count = 0
-for meta_idx in tqdm(range(NUM_IMS * 30)):
+# used to indicate which amodal masks are part of the same group, to be written to file
+group_indices = []
+# multiply num_ims by upper bound of number of instances per image
+for meta_idx in tqdm(range(NUM_IMS * 6)):
     idx = meta_idx % NUM_IMS
     f = open(os.path.join(JSON_DIR, "image_{:06d}.json".format(idx)))
     json_file = json.load(f)
@@ -164,22 +169,25 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
     mask_path = os.path.join(MASK_DIR, "image_{:06d}.png".format(idx))
 
     # read and blockify scene
-    scene_im = io.imread(scene_path)
+    scene_im = io.imread(scene_path, as_gray=True)
     scene_im = resize_scene(scene_im)
+    assert(np.all(scene_im < 1.0001))
+    scene_im = (scene_im * 255).astype(np.uint8)
 
     # for modal masks
     joint_mask = io.imread(mask_path)
     for label in json_file["labels"]:
         target_name = label["label_class"]
         target_id = label["object_id"]
-        target_path = os.path.join(AMODAL_MASK_DIR,
+        target_path = os.path.join(MODAL_MASK_DIR,
                                    "image_{:06d}".format(idx),
                                    "{}.png".format(target_name))
         try:
+            # modal mask
             target_im = io.imread(target_path)
             # get first (basically equivalent slice)
-            target_im = np.sum(target_im, axis=2)
-            modal_target = make_target(target_im, ANGLE, SHEAR)
+            target_im = np.sum(target_im, axis=2) // 3
+            modal_target = make_target(target_im / 255, ANGLE, SHEAR)
             modal_target[modal_target > 0] = 1
         except:
             continue
@@ -190,65 +198,71 @@ for meta_idx in tqdm(range(NUM_IMS * 30)):
         modal_mask[modal_mask > 0] = 1
         if 1 not in modal_mask:
             continue
-        data_count += 1
 
-        # really, all these masks are amodal
-        amodal_target = modal_target
+        # for all amodal masks
+        amodal_path = os.path.join(AMODAL_MASK_DIR,
+                                  target_name)
+        try:
+            os.listdir(amodal_path)
+        except:
+            continue
 
-        """plt.imshow(scene_im)
-        plt.show()
-        plt.imshow(modal_mask)
-        plt.show()
-        plt.imshow(modal_target)
-        plt.show()"""
+        for amodal_file in os.listdir(amodal_path):
+            try:
+                amodal_im = io.imread(os.path.join(amodal_path, amodal_file))
+                # get first (basically equivalent slice)
+                amodal_im = np.sum(amodal_im, axis=2) // 3
+                amodal_target = make_target(amodal_im / 255, ANGLE, SHEAR)
+                amodal_target[amodal_target > 0] = 1
+                amodal_target = amodal_target.astype("uint8")
+            except:
+                continue
 
-        """print(modal_mask.shape)
-        print(amodal_mask.shape)
-        print(scene_im.shape)
-        print(np.unique(modal_mask))
-        print(np.unique(amodal_mask))
-        print(np.unique(scene_im))
-        print(modal_mask.dtype)
-        print(amodal_mask.dtype)
-        print(scene_im.dtype)"""
+            # print(scene_im.dtype, np.unique(scene_im), scene_im.shape, np.count_nonzero(scene_im))
+            # print(modal_mask.dtype, np.unique(modal_mask), modal_mask.shape)
+            # print(amodal_target.dtype, np.unique(amodal_target), amodal_target.shape)
+            # print("At 48:", np.sum(scene_im), np.sum(scene_im[48:-48, :]))
+            # print("At 49:", np.sum(scene_im), np.sum(scene_im[49:-49, :]))
+            # print("At 64:", np.sum(scene_im), np.sum(scene_im[64:-64, :]))
 
-        io.imsave(os.path.join(
-            OUT_DIR,
-            "test-train/",
-            "image_{:08d}.png".format(meta_idx)),
-               scene_im)
-        io.imsave(os.path.join(
-            OUT_DIR,
-            "test-train/",
-            "modal_segmentation_{:08d}.png".format(meta_idx)),
-               modal_mask)
-        io.imsave(os.path.join(
-            OUT_DIR,
-            "test-train/",
-            "modal_target_{:08d}.png".format(meta_idx)),
-               modal_target)
-        io.imsave(os.path.join(
-            OUT_DIR,
-            "test-train/",
-            "amodal_target_{:08d}.png".format(meta_idx)),
-               amodal_target)
-        io.imsave(os.path.join(
-            OUT_DIR,
-            "test-one-shot/",
-            "image_{:08d}.png".format(meta_idx)),
-               scene_im)
-        io.imsave(os.path.join(
-            OUT_DIR,
-            "test-one-shot/",
-            "modal_segmentation_{:08d}.png".format(meta_idx)),
-               modal_mask)
-        io.imsave(os.path.join(
-            OUT_DIR,
-            "test-one-shot/",
-            "modal_target_{:08d}.png".format(meta_idx)),
-               modal_target)
-        io.imsave(os.path.join(
-            OUT_DIR,
-            "test-one-shot/",
-            "amodal_target_{:08d}.png".format(meta_idx)),
-               amodal_target)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                "test-train/",
+                "image_{:08d}.png".format(data_count)),
+                   scene_im)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                "test-train/",
+                "modal_segmentation_{:08d}.png".format(data_count)),
+                   modal_mask)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                "test-train/",
+                "modal_target_{:08d}.png".format(data_count)),
+                   modal_target)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                "test-train/",
+                "amodal_target_{:08d}.png".format(data_count)),
+                   amodal_target)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                "test-one-shot/",
+                "image_{:08d}.png".format(data_count)),
+                   scene_im)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                "test-one-shot/",
+                "modal_segmentation_{:08d}.png".format(data_count)),
+                   modal_mask)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                "test-one-shot/",
+                "modal_target_{:08d}.png".format(data_count)),
+                   modal_target)
+            io.imsave(os.path.join(
+                OUT_DIR,
+                "test-one-shot/",
+                "amodal_target_{:08d}.png".format(data_count)),
+                   amodal_target)
+            data_count += 1

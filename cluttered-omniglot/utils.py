@@ -61,3 +61,6 @@ def sum_regularizer(regularizer_list, scope=None):
 def softmax(x, axis=None):
     """Compute softmax values for each sets of scores in x."""
     return np.exp(x - special.logsumexp(x, axis=axis, keepdims=True))
+
+def high_contrast(img):
+    return ((img.astype(np.float32) - np.min(img)) / (np.max(img.astype(np.float32)) - np.min(img)))

@@ -89,21 +89,28 @@ def get_shift_xy(image):
     return shift
 
 
+def normalize_nonzero_image(im):
+    # normalizes nonzero values in the image
+    # particular to WISDOM data padding
+    center = im[48:-48, :]
+    im = im - np.mean(center)
+
+
 """DATA GENERATION FUNCTIONS"""
 def load_train(fold_dir, index, label_type=None, target_type=None):
     path = os.path.join(fold_dir, 'train/')
     ims_train = io.imread(
-        os.path.join(path, 'image_{:08d}.png'.format(index)))
+        os.path.join(path, 'image_{:08d}.png'.format(index)), as_gray=True)
     if label_type:
         seg_train = io.imread(
-            os.path.join(path, '{}_segmentation_{:08d}.png'.format(label_type, index)))
+            os.path.join(path, '{}_segmentation_{:08d}.png'.format(label_type, index)), as_gray=True)
     else:
         seg_train = io.imread(
-            os.path.join(path, 'segmentation_{:08d}.png'.format(index)))
+            os.path.join(path, 'segmentation_{:08d}.png'.format(index)), as_gray=True)
     if target_type:
-        tar_train = io.imread(os.path.join(path, '{}_target_{:08d}.png'.format(target_type, index)))
+        tar_train = io.imread(os.path.join(path, '{}_target_{:08d}.png'.format(target_type, index)), as_gray=True)
     else:
-        tar_train = io.imread(os.path.join(path, 'target_{:08d}.png'.format(index)))
+        tar_train = io.imread(os.path.join(path, 'target_{:08d}.png'.format(index)), as_gray=True)
 
     return ims_train, seg_train, tar_train
 
@@ -118,19 +125,19 @@ def load_val(fold_dir, index, subset, label_type=None, target_type=None):
     else:
         print(subset + ' is not a valid subset')
     ims_val = io.imread(
-        os.path.join(path, 'image_{:08d}.png'.format(index)))
+        os.path.join(path, 'image_{:08d}.png'.format(index)), as_gray=True)
     if label_type:
         seg_val = io.imread(
-            os.path.join(path, '{}_segmentation_{:08d}.png'.format(label_type, index)))
+            os.path.join(path, '{}_segmentation_{:08d}.png'.format(label_type, index)), as_gray=True)
     else:
         seg_val = io.imread(
-            os.path.join(path, 'segmentation_{:08d}.png'.format(index)))
+            os.path.join(path, 'segmentation_{:08d}.png'.format(index)), as_gray=True)
     if target_type:
         tar_val = io.imread(
-            os.path.join(path, '{}_target_{:08d}.png'.format(target_type, index)))
+            os.path.join(path, '{}_target_{:08d}.png'.format(target_type, index)), as_gray=True)
     else:
         tar_val = io.imread(
-            os.path.join(path, 'target_{:08d}.png'.format(index)))
+            os.path.join(path, 'target_{:08d}.png'.format(index)), as_gray=True)
 
     return ims_val, seg_val, tar_val
 
@@ -158,19 +165,19 @@ def load_test(fold_dir, index, subset, label_type=None, target_type=None):
         print(subset + ' is not a testid subset')
 
     ims_test = io.imread(
-        os.path.join(path, 'image_{:08d}.png'.format(index)))
+        os.path.join(path, 'image_{:08d}.png'.format(index)), as_gray=True)
     if label_type:
         seg_test = io.imread(
-            os.path.join(path, '{}_segmentation_{:08d}.png'.format(label_type, index)))
+            os.path.join(path, '{}_segmentation_{:08d}.png'.format(label_type, index)), as_gray=True)
     else:
         seg_test = io.imread(
-            os.path.join(path, 'segmentation_{:08d}.png'.format(index)))
+            os.path.join(path, 'segmentation_{:08d}.png'.format(index)), as_gray=True)
     if target_type:
         tar_test = io.imread(
-            os.path.join(path, '{}_target_{:08d}.png'.format(target_type, index)))
+            os.path.join(path, '{}_target_{:08d}.png'.format(target_type, index)), as_gray=True)
     else:
         tar_test = io.imread(
-            os.path.join(path, 'target_{:08d}.png'.format(index)))
+            os.path.join(path, 'target_{:08d}.png'.format(index)), as_gray=True)
 
     return ims_test, seg_test, tar_test
 
@@ -184,7 +191,16 @@ def threaded_batch_generator(generator, batch_size, max_queue_len=1):
         ims_batch, seg_batch, tar_batch = [], [], []
         index = 0
         for ims, seg, tar in generator:
-            ims_batch.append(ims)
+            # print(ims.dtype, np.unique(ims), ims.shape)
+            # print(seg.dtype, np.unique(seg), seg.shape)
+            # print(tar.dtype, np.unique(tar), tar.shape)
+            if (np.max(ims) < 2):
+                ims *= 255
+            ims = ims.astype(np.float32)
+            seg = seg.astype(np.float32)
+            tar = tar.astype(np.float32)
+            normalize_nonzero_image(ims)
+            ims_batch.append(np.stack([ims, ims, ims], axis=2))
             seg_batch.append(np.expand_dims(seg, axis=2))
             tar_batch.append(np.stack([tar, tar, tar], axis=2))
             index += 1
@@ -233,6 +249,7 @@ def block_generator(
 
         # make seg binary
         seg[seg > 0] = 1
+
         yield im, seg, tar
         step += 1
         if step == num_blocks:
@@ -368,8 +385,8 @@ def training(dataset_dir,
         active_frac /= 100
         print("Found active_frac to be {}.".format(active_frac))
 
-        # mean = np.mean(np.array(sample_im_batch))
-        # std = np.std(np.array(sample_im_batch))
+        mean = np.mean(np.array(sample_im_batch))
+        std = np.std(np.array(sample_im_batch))
 
         # generate tensorflow placeholders and variables
         images, labels, targets = get_training_placeholders(
@@ -377,10 +394,6 @@ def training(dataset_dir,
             tar_block.shape[0], tar_block.shape[1]
         )
         learn_rate = tf.Variable(learning_rate)
-
-        # preprocess images
-        # targets = (targets - mean)/std
-        # images = (images - mean)/std
 
         # call desired network to get segmentations
         segmentations = model.generate_segmentations(
@@ -597,8 +610,9 @@ def evaluation(dataset_dir,
     model = get_model(model_name, "eval", 0.0, dropout)
     with tf.Graph().as_default():
         # define logging parameters
-        EVAL_CKPT_FILE = log_dir + 'Run_Epoch11_Step0.ckpt'# 'Run_Epoch11_Step0.ckpt'
-        perms = np.random.permutation(test_size)
+        EVAL_CKPT_FILE = log_dir + 'Run.ckpt'# 'Run_Epoch11_Step0.ckpt'
+        perms = np.arange(test_size) # np.random.permutation(test_size)
+
 
         # define training parameters
         batch_size = batch_size
@@ -621,8 +635,8 @@ def evaluation(dataset_dir,
             im_block, _, tar_block = sample
             sample_im_batch.append(im_block)
 
-        # mean = np.mean(np.array(sample_im_batch))
-        # std = np.std(np.array(sample_im_batch))
+        mean = np.mean(np.array(sample_im_batch))
+        std = np.std(np.array(sample_im_batch))
 
         # generate tensorflow placeholders and variables
         im_block = np.zeros((1, 384, 384, 1))
@@ -633,8 +647,7 @@ def evaluation(dataset_dir,
         )
 
         # preprocess images
-        # targets = (targets - mean)/std
-        # images = (images - mean)/std
+        images = (images - mean) / std
 
         # run network and produce segmentations
         segmentations = model.generate_segmentations(
@@ -701,9 +714,8 @@ def evaluation(dataset_dir,
                     avg_confs.append(np.sum(nonzero_conf) / nonzero_conf.shape[0])
 
                 # generate confidence heatmap, ground-truth overlay, and predicted mask images
-                if vis and step < 25:
+                if vis and step < 600:
                     # select index and fetch all relevant images from batch
-                    print(np.unique(ims))
                     saved_idx = np.random.choice(batch_size)
                     im = ims[saved_idx] / 255
                     seg = labels_batch[saved_idx]
@@ -714,11 +726,19 @@ def evaluation(dataset_dir,
                     vis_dir = os.path.join(log_dir, "vis/")
                     dataset_utils.mkdir_if_missing(vis_dir)
 
+                    # high contrast im
+                    hc_box = [80, -80, 40, -40]
+                    hc_im = im[hc_box[0]:hc_box[1], hc_box[2]:hc_box[3]]
+                    hc_im = utils.high_contrast(hc_im)
+                    hc_seg = seg[hc_box[0]:hc_box[1], hc_box[2]:hc_box[3]]
+                    hc_conf = conf[hc_box[0]:hc_box[1], hc_box[2]:hc_box[3]]
+                    hc_pred = pred[hc_box[0]:hc_box[1], hc_box[2]:hc_box[3]]
+
                     # plot and save images
                     plt.figure(figsize=(15, 15))
 
-                    plt.imshow(im)
-                    plt.imshow(np.ma.masked_where(seg[...,0] == 0, seg[...,0]), cmap="summer")
+                    plt.imshow(hc_im)
+                    plt.imshow(np.ma.masked_where(hc_seg[...,0] == 0, hc_seg[...,0]), cmap="summer")
                     plt.axis('off')
                     plt.savefig(
                         os.path.join(vis_dir, "gt_overlay_{}.png").format(step),
@@ -726,17 +746,18 @@ def evaluation(dataset_dir,
                     )
                     plt.clf()
 
-                    plt.imshow(im)
-                    plt.imshow(np.ma.masked_where(pred[...,0] == 0, pred[...,0]), cmap="coolwarm")
+                    plt.imshow(hc_im)
+                    plt.imshow(np.ma.masked_where(hc_pred[...,0] == 0, hc_pred[...,0]), cmap="coolwarm")
                     plt.axis('off')
                     plt.savefig(os.path.join(vis_dir, "pred_overlay_{}.png").format(step),
                                 bbox_inches='tight')
                     plt.clf()
 
-                    plt.imshow(im)
+                    plt.imshow(hc_im)
                     # softmax confs for heatmap
-                    conf = utils.softmax(conf, axis=-1)
-                    plt.imshow(conf[...,1], cmap="hot")
+
+                    hc_conf = utils.softmax(hc_conf, axis=-1)
+                    plt.imshow(hc_conf[...,1], cmap="hot")
                     plt.axis('off')
                     plt.savefig(os.path.join(vis_dir, "conf_overlay_{}.png").format(step),
                                 bbox_inches='tight')
@@ -746,27 +767,27 @@ def evaluation(dataset_dir,
                         os.path.join(vis_dir, "sample_pred_{}.npy").format(step),
                         pred,
                         allow_pickle=False)
-                    np.save(
-                        os.path.join(vis_dir, "sample_gt_{}.npy").format(step),
-                        seg,
-                        allow_pickle=False)
-                    np.save(
-                        os.path.join(vis_dir, "sample_conf_{}.npy").format(step),
-                        conf,
-                        allow_pickle=False)
+                    # np.save(
+                    #     os.path.join(vis_dir, "sample_gt_{}.npy").format(step),
+                    #     seg,
+                    #     allow_pickle=False)
+                    # np.save(
+                    #     os.path.join(vis_dir, "sample_conf_{}.npy").format(step),
+                    #     conf,
+                    #     allow_pickle=False)
                     np.save(
                         os.path.join(vis_dir, "sample_tar_{}.npy").format(step),
                         target_batch[saved_idx],
                         allow_pickle=False)
                     np.save(
                         os.path.join(vis_dir, "sample_im_{}.npy").format(step),
-                        im,
+                        hc_im,
                         allow_pickle=False)
                     # normalized images
-                    np.save(
-                        os.path.join(vis_dir, "norm_im_{}.npy").format(step),
-                        images_batch[saved_idx],
-                        allow_pickle=False)
+                    # np.save(
+                    #     os.path.join(vis_dir, "norm_im_{}.npy").format(step),
+                    #     images_batch[saved_idx],
+                    #     allow_pickle=False)
 
 
                 images_batch, labels_batch, target_batch = next(test_eval_generator)

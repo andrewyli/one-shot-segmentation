@@ -17,12 +17,12 @@ import pprint
 DISPLAY_ONLY = False
 
 # DO NOT COPY FROM NOTEBOOK - OS RELATED
-cpu_cores = [0, 1, 2, 3, 4, 5, 6, 7, 8] # Cores (numbered 0-11)
+cpu_cores = [9, 10, 11] # Cores (numbered 0-11)
 os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.getpid()))
 
 # SET FOLD_NUM
 DATASET_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/wisdom-sim-block-npy"
-FOLD_NUM = 33
+FOLD_NUM = 42
 OUT_DIR = "/nfs/diskstation/projects/dex-net/segmentation/datasets/mask-net/fold_{:04d}".format(FOLD_NUM)
 print(OUT_DIR)
 mkdir_if_missing(OUT_DIR)
@@ -34,7 +34,7 @@ mkdir_if_missing(os.path.join(OUT_DIR, "test-one-shot"))
 
 # COPY FROM NOTEBOOK BUT KEEP NUM_IMS 50000
 # Dataset size (OG: 50000, rotations 1)
-NUM_IMS = 12500
+NUM_IMS = 50000
 NUM_ROTATIONS = 4
 
 # input image size
@@ -56,6 +56,13 @@ def rot_x(phi, theta, ptx, pty):
 
 def rot_y(phi, theta, ptx, pty):
     return -np.sin(phi+theta)*ptx + np.cos(phi-theta)*pty
+
+
+def normalize_nonzero_image(im):
+    # normalizes nonzero values in the image
+    # particular to WISDOM data padding
+    center = im[48:-48, :]
+    return im - np.mean(center)
 
 
 def prepare_img(img, angle=90, shear=0, scale=None):
@@ -155,8 +162,10 @@ for c_idx in tqdm(range(NUM_IMS)):
         DATASET_DIR,
         "depth_ims",
         "image_{:06d}.png".format(im_idx))
-    im = io.imread(im_path)
+    im = io.imread(im_path, as_gray=True)
     im = resize_scene(im)
+    assert(np.all(im < 1.0001))
+    im = (im * 255).astype(np.uint8)
 
     for mask_idx in range(11):
         for rot in range(NUM_ROTATIONS):
@@ -165,7 +174,7 @@ for c_idx in tqdm(range(NUM_IMS)):
                 DATASET_DIR,
                 "amodal_segmasks",
                 channel_name)
-            amodal_image = io.imread(amodal_path)
+            amodal_image = io.imread(amodal_path, as_gray=True)
             amodal_mask = resize_scene(amodal_image)
             amodal_mask[amodal_mask > 0] = 1
 
@@ -173,7 +182,7 @@ for c_idx in tqdm(range(NUM_IMS)):
                 DATASET_DIR,
                 "modal_segmasks",
                 channel_name)
-            modal_image = io.imread(modal_path)
+            modal_image = io.imread(modal_path, as_gray=True)
             modal_mask = resize_scene(modal_image)
             modal_mask[modal_mask > 0] = 1
 
@@ -196,6 +205,9 @@ for c_idx in tqdm(range(NUM_IMS)):
 
             data_count += 1
 
+            # print(im.dtype, np.unique(im), im.shape, np.count_nonzero(im))
+            # print(modal_mask.dtype, np.unique(modal_mask), modal_mask.shape)
+            # print(amodal_target.dtype, np.unique(amodal_target), amodal_target.shape)
 
             if DISPLAY_ONLY:
                 plt.figure()
