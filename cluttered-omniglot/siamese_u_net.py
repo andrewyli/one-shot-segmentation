@@ -27,7 +27,7 @@ class SiameseUNet(Model):
 
     ### Encoder ###
     def encoder(self, images, feature_maps=16, dilated=False, reuse=False, scope='encoder'):
-        with tf.variable_scope(scope, reuse=reuse):
+        with tf.compat.v1.variable_scope(scope, reuse=reuse):
             net = images
             end_points = OrderedDict()
             combined_reg = tf.contrib.layers.sum_regularizer([
@@ -81,9 +81,9 @@ class SiameseUNet(Model):
 
                 # apply dropout
                 if self.mode == "train":
-                    net = tf.nn.dropout(net, keep_prob=1-self.dropout)
+                    net = tf.nn.dropout(net, rate=self.dropout)
                 else:
-                    net = tf.nn.dropout(net, keep_prob=1.0)
+                    net = tf.nn.dropout(net, rate=0.0)
 
                 end_points['encode8/conv3_1'] = net
 
@@ -97,7 +97,7 @@ class SiameseUNet(Model):
         def conv(fmaps, ks=3): return lambda net, name: slim.conv2d(net, num_outputs=fmaps, kernel_size=ks, scope=name)
         def conv_t(fmaps, ks=3): return lambda net, name: slim.conv2d_transpose(net, num_outputs=fmaps, kernel_size=ks, stride=[2, 2], scope=name)
         def skip(end_point): return lambda net, name: tf.concat([net, end_point], axis=3, name=name)
-        unpool =  lambda net, name: tf.image.resize_nearest_neighbor(net, [2*tf.shape(net)[1], 2*tf.shape(net)[2]], name=name)
+        unpool =  lambda net, name: tf.compat.v1.image.resize_nearest_neighbor(net, [2*tf.shape(net)[1], 2*tf.shape(net)[2]], name=name)
 
         layers = OrderedDict()
         layers['decode8/skip'] = skip(encoder_end_points['encode8/conv3_1'])
@@ -134,7 +134,7 @@ class SiameseUNet(Model):
 
         # layers['decode0/classifier'] = lambda net, name: slim.conv2d_transpose(net, num_outputs=num_classes, kernel_size=3, activation_fn=None, scope=name)
 
-        with tf.variable_scope(scope, reuse=reuse):
+        with tf.compat.v1.variable_scope(scope, reuse=reuse):
             net = images
             end_points = OrderedDict()
             with slim.arg_scope([slim.conv2d],

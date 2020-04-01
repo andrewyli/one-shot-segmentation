@@ -14,7 +14,7 @@ from skimage import io
 from tqdm import tqdm
 
 # Memory settings
-cpu_cores = [7, 8, 9, 10, 11] # Cores (numbered 0-11)
+cpu_cores = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23] # Cores (numbered 0-11)
 os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.getpid()))
 
 slim = tf.contrib.slim
@@ -32,15 +32,15 @@ def get_model(model_name, *args):
 
 def get_training_placeholders(batch_size, im_height, im_width,
                               tar_height, tar_width):
-    images = tf.placeholder(
+    images = tf.compat.v1.placeholder(
         tf.float32,
         shape=[batch_size, im_height, im_width, 3],
         name='images')
-    labels = tf.placeholder(
+    labels = tf.compat.v1.placeholder(
         tf.int32,
         shape=[batch_size, im_height, im_width, 1],
         name='labels')
-    targets = tf.placeholder(
+    targets = tf.compat.v1.placeholder(
         tf.float32,
         shape=[batch_size, tar_height, tar_width, 3],
         name='targets')
@@ -258,7 +258,7 @@ def calculate_IoU(segmentations, labels, threshold=0.3):
         tf.reduce_sum(pred, axis=(1, 2)) + tf.reduce_sum(seg, axis=(1, 2))
         - tf.reduce_sum(pred * seg, axis=(1, 2)))
     # Remove NaNs which appear when the target does not exist
-    clean_IoU = tf.where(tf.is_nan(IoU), tf.ones_like(IoU), IoU)
+    clean_IoU = tf.where(tf.math.is_nan(IoU), tf.ones_like(IoU), IoU)
     return clean_IoU
 
 
@@ -325,11 +325,10 @@ def training(dataset_dir,
         if pretraining_checkpoint is not None:
             print("Continuing from last pretraining checkpoint.")
             PRETRAINING_CKPT_FILE = pretraining_checkpoint + 'Run.ckpt'
-        if not tf.gfile.Exists(log_dir):
-            tf.gfile.MakeDirs(log_dir)
+        if not tf.io.gfile.exists(log_dir):
+            tf.io.gfile.makedirs(log_dir)
 
         # Define training parameters
-        batch_size = batch_size
         print("Batch size: {}".format(batch_size))
         print("Dropout: {}".format(dropout))
         # max_steps for epoch training
@@ -379,8 +378,8 @@ def training(dataset_dir,
         learn_rate = tf.Variable(learning_rate)
 
         # preprocess images
-        targets = (targets - mean)/std
-        images = (images - mean)/std
+        targets = (targets - mean) / std
+        images = (images - mean) / std
 
         # call desired network to get segmentations
         segmentations = model.generate_segmentations(
@@ -388,19 +387,19 @@ def training(dataset_dir,
         loss_labels = tf.one_hot(tf.squeeze(labels), depth=2)
 
         # update batch norm
-        update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        update_ops = tf.compat.v1.get_collection(tf.compat.v1.GraphKeys.UPDATE_OPS)
 
-        main_loss = tf.losses.compute_weighted_loss(
+        main_loss = tf.compat.v1.losses.compute_weighted_loss(
             tf.nn.weighted_cross_entropy_with_logits(
-                targets=loss_labels,
+                labels=loss_labels,
                 logits=segmentations,
                 pos_weight=1.0/active_frac))
-        reg_loss = tf.add_n(tf.losses.get_regularization_losses())
+        reg_loss = tf.add_n(tf.compat.v1.losses.get_regularization_losses())
         loss = main_loss + reg_loss
 
         #Training step
-        optimizer = tf.train.AdamOptimizer(learn_rate)
-        optimizer = tf.train.experimental.enable_mixed_precision_graph_rewrite(optimizer)
+        optimizer = tf.compat.v1.train.AdamOptimizer(learn_rate)
+        optimizer = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(optimizer, loss_scale='dynamic')
         global_step = tf.Variable(0, name = 'global_step', trainable = False)
         train_op = optimizer.minimize(loss, global_step=global_step)
 
@@ -415,15 +414,15 @@ def training(dataset_dir,
         # create summaries
         # tf.summary.scalar('main_loss', main_loss)
         # tf.summary.scalar('regularization_loss', reg_loss)
-        tf.summary.scalar('loss', loss)
-        tf.summary.scalar('mean_IoU', mean_IoU)
-        tf.summary.scalar('count_IoU', count_IoU)
+        tf.compat.v1.summary.scalar('loss', loss)
+        tf.compat.v1.summary.scalar('mean_IoU', mean_IoU)
+        tf.compat.v1.summary.scalar('count_IoU', count_IoU)
 
         # collect summaries
-        summary = tf.summary.merge_all()
+        summary = tf.compat.v1.summary.merge_all()
 
-        saver = tf.train.Saver(max_to_keep=None)
-        restorer = tf.train.Saver(slim.get_model_variables())
+        saver = tf.compat.v1.train.Saver(max_to_keep=None)
+        restorer = tf.compat.v1.train.Saver(slim.get_model_variables())
 
         # Initalize batch generators
         train_generator = threaded_batch_generator(
@@ -468,19 +467,19 @@ def training(dataset_dir,
         print("Beginning session")
 
         #Start Session
-        with tf.Session() as sess:
+        with tf.compat.v1.Session() as sess:
             #Initialize logging files
-            summary_writer_train = tf.summary.FileWriter(log_dir, sess.graph)
-            summary_writer_val_train = tf.summary.FileWriter(log_dir + 'val_train')
-            summary_writer_val_eval = tf.summary.FileWriter(log_dir + 'val_eval')
+            summary_writer_train = tf.compat.v1.summary.FileWriter(log_dir, sess.graph)
+            summary_writer_val_train = tf.compat.v1.summary.FileWriter(log_dir + 'val_train')
+            summary_writer_val_eval = tf.compat.v1.summary.FileWriter(log_dir + 'val_eval')
 
             # real image writer, can delete later
             if real_im_path:
-                summary_writer_real_eval = tf.summary.FileWriter(log_dir + 'real_eval')
+                summary_writer_real_eval = tf.compat.v1.summary.FileWriter(log_dir + 'real_eval')
 
 
             # Initialize from scratch or finetune from previous training
-            sess.run(tf.global_variables_initializer())
+            sess.run(tf.compat.v1.global_variables_initializer())
             if pretraining_checkpoint is not None:
                 restorer.restore(sess, PRETRAINING_CKPT_FILE)
                 print("Restoring from {}".format(PRETRAINING_CKPT_FILE))
@@ -490,32 +489,37 @@ def training(dataset_dir,
             duration = []
             losses = []
             global_step = 0
-            for epoch in range(epochs):
-                print("Epoch {}/{}".format(epoch + 1, epochs))
-                print("Training for {} steps".format(max_train_steps))
+            epoch_bar = tqdm(range(epochs), total=epochs, ncols=80)
+            for epoch in epoch_bar:
+                epoch_bar.set_description('Train epoch={:02d}'.format(epoch))
+                # print("Epoch {}/{}".format(epoch + 1, epochs))
+                # print("Training for {} steps".format(max_train_steps))
 
                 # learning rate schedule
                 if epoch % 2 == 1:
                     learning_rate = learning_rate / 2
-                    print('lowering learning rate to %.4f'%(learning_rate))
+                    # print('lowering learning rate to %.4f'%(learning_rate))
 
                 last_time = time.time()
-                for step in range(max_train_steps):
+                train_bar = tqdm(range(max_train_steps), total=max_train_steps, ncols=80)
+                for step in train_bar:
+                    train_bar.set_description('Train step={:05d}'.format(step))
                     images_batch, labels_batch, target_batch = next(train_generator)
                     _, loss_value = sess.run([train_op, loss],
                                              feed_dict = {targets: target_batch,
                                                           images: images_batch,
                                                           labels: labels_batch,
                                                           learn_rate: learning_rate})
+                    train_bar.set_postfix_str('Loss: {:.3f}'.format(loss_value))
                     # evaluate
                     if step % 1000 == 0:
                         # average loss/mIoU over several batches
                         before_eval_time = time.time()
                         losses, mIoUs = [], []
                         for eval_step in range(eval_size // batch_size):
-                            images_batch, labels_batch, target_batch = next(train_generator)
+                            images_batch, labels_batch, targets_batch = next(train_generator)
                             tf_IoU, tf_loss = sess.run([mean_IoU, loss],
-                                                       feed_dict = {targets: target_batch,
+                                                       feed_dict = {targets: targets_batch,
                                                                     images: images_batch,
                                                                     labels: labels_batch})
                             losses.append(tf_loss)
@@ -523,19 +527,20 @@ def training(dataset_dir,
                         avg_loss = np.sum(losses) / len(losses)
                         avg_mIoU = np.sum(mIoUs) / len(mIoUs)
 
-                        summary_train = tf.Summary()
+                        summary_train = tf.compat.v1.Summary()
                         summary_train.value.add(tag="mIoU", simple_value=avg_mIoU)
                         summary_train.value.add(tag="loss", simple_value=avg_loss)
                         summary_writer_train.add_summary(summary_train, global_step)
                         summary_writer_train.flush()
-                        print('Step %5d: avg_loss = %.4f avg_mIoU: %.3f (%.3f sec)'
-                              % (step, avg_loss, avg_mIoU, np.mean(duration)))
+                        
+                        print('Step %5d: avg_loss = %.4f avg_mIoU: %.3f (%.3f sec)' % (step, avg_loss, avg_mIoU, np.mean(duration)))
+                        
                         #evaluate val_eval
                         losses, mIoUs = [], []
                         for eval_step in range(eval_size // batch_size):
-                            images_batch, labels_batch, target_batch = next(val_eval_generator)
+                            images_batch, labels_batch, targets_batch = next(val_eval_generator)
                             tf_IoU, tf_loss = sess.run([mean_IoU, loss],
-                                                       feed_dict = {targets: target_batch,
+                                                       feed_dict = {targets: targets_batch,
                                                                     images: images_batch,
                                                                     labels: labels_batch})
                             losses.append(tf_loss)
@@ -543,7 +548,7 @@ def training(dataset_dir,
                         avg_loss = np.sum(losses) / len(losses)
                         avg_mIoU = np.sum(mIoUs) / len(mIoUs)
 
-                        summary_val_eval = tf.Summary()
+                        summary_val_eval = tf.compat.v1.Summary()
                         summary_val_eval.value.add(tag="mIoU", simple_value=avg_mIoU)
                         summary_val_eval.value.add(tag="loss", simple_value=avg_loss)
                         summary_writer_val_eval.add_summary(summary_val_eval, global_step)
@@ -552,9 +557,9 @@ def training(dataset_dir,
                         if real_im_path:
                             losses, mIoUs = [], []
                             for eval_step in range(eval_size // batch_size):
-                                images_batch, labels_batch, target_batch = next(real_eval_generator)
+                                images_batch, labels_batch, targets_batch = next(real_eval_generator)
                                 tf_IoU, tf_loss = sess.run([mean_IoU, loss],
-                                                           feed_dict = {targets: target_batch,
+                                                           feed_dict = {targets: targets_batch,
                                                                         images: images_batch,
                                                                         labels: labels_batch})
                                 losses.append(tf_loss)
@@ -562,7 +567,7 @@ def training(dataset_dir,
                             avg_loss = np.sum(losses) / len(losses)
                             avg_mIoU = np.sum(mIoUs) / len(mIoUs)
 
-                            summary_real_eval = tf.Summary()
+                            summary_real_eval = tf.compat.v1.Summary()
                             summary_real_eval.value.add(tag="mIoU", simple_value=avg_mIoU)
                             summary_real_eval.value.add(tag="loss", simple_value=avg_loss)
                             summary_writer_real_eval.add_summary(summary_real_eval, global_step)
@@ -571,6 +576,8 @@ def training(dataset_dir,
                     new_time = time.time()
                     duration.append(new_time - last_time)
                     last_time = new_time
+
+
                     #Create checkpoint
                     if step % 5000 == 0:
                         checkpoint_file = os.path.join(
@@ -670,7 +677,9 @@ def evaluation(dataset_dir,
                 perms=perms), batch_size)
 
         # start Session
-        with tf.Session() as sess:
+        tf_cfg = tf.ConfigProto()
+        tf_cfg.gpu_options.allow_growth = True
+        with tf.Session(config=tf_cfg) as sess:
             # Initialize from scratch or finetune from previous training
             sess.run(tf.global_variables_initializer())
             restorer.restore(sess, EVAL_CKPT_FILE)

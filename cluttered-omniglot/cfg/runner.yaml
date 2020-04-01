@@ -1,11 +1,11 @@
 train: 1
 log_dir: logs/clutter
-model_name: test_fold11
+model_name: test_fold12
 pretrained: 0
 
 dataset_dir: datasets/mask-net
-fold_num: 11
-train_size: 800000
+fold_num: 12
+train_size: 400000
 val_size: 12500
 test_size: 12500
 label_type: modal
@@ -17,8 +17,8 @@ lr: 0.0001
 feature_maps: 24
 reg_factor: 0
 dropout: 0.1
-batch_size: 16
-eval_size: 10
+batch_size: 32
+eval_size: 320
 
 real_im_path: datasets/mask-net-real/fold_0010
 vis: 0

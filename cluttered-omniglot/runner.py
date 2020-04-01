@@ -33,7 +33,7 @@ def train(config):
 
 def evaluate(config):
     datadir = os.path.join(
-        config['dataset_dir'], "fold_{:04d}".format(FOLD_NUM))
+        config['dataset_dir'], "fold_{:04d}".format(config['fold_num']))
     logdir = os.path.join(config['log_dir'], config['model_name'])
 
     trainer.evaluation(datadir,
