@@ -199,8 +199,10 @@ def threaded_batch_generator(generator, batch_size, max_queue_len=1):
             ims = ims.astype(np.float32)
             seg = seg.astype(np.float32)
             tar = tar.astype(np.float32)
+            print(ims.shape, np.unique(ims))
             normalize_nonzero_image(ims)
-            ims_batch.append(np.stack([ims, ims, ims], axis=2))
+            print(ims.shape, np.unique(ims))
+            ims_batch.append(ims)
             seg_batch.append(np.expand_dims(seg, axis=2))
             tar_batch.append(np.stack([tar, tar, tar], axis=2))
             index += 1

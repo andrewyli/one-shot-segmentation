@@ -1,8 +1,8 @@
 import trainer
 import os
 
-TRAINING = True
-USING_SIM = True
+TRAINING = False
+USING_SIM = False
 
 if USING_SIM:
     model_name = 'siamese-u-net'
@@ -17,7 +17,7 @@ if USING_SIM:
     # LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + WEIGHTS_FOLDER + '/')
     EXPERIMENT_NAME = "amodal_sun_rot1_reg0_drop_0.0"
     LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + EXPERIMENT_NAME + '/')
-    FOLD_NUM = 50
+    FOLD_NUM = 10
     REG_FACTOR = 0
     DROPOUT = 0.0
     BATCH_SIZE = 10
@@ -28,7 +28,7 @@ if USING_SIM:
 
     # Option for dataset maximum sizes
     # lower-bound single rotation
-    TRAIN_SIZE = 430000
+    TRAIN_SIZE = 200000
     VAL_SIZE = 12500
     TEST_SIZE = 12500
 
@@ -46,16 +46,16 @@ else:
         "/nfs/diskstation/projects/dex-net/segmentation/datasets/",
         "mask-net-real"
     )
-    FOLD_NUM = 20
+    FOLD_NUM = 11
     TRAIN_SIZE = 0
     VAL_SIZE = 0
     TEST_SIZE = 600#0
     BATCH_SIZE = 1
-    DROPOUT = 0.0
-    WEIGHTS_FOLDER = "sun_fold13_rot4_reg0_drop0"
+    DROPOUT = 0.1
+    WEIGHTS_FOLDER = "mike_fold12_rot2_reg0_drop0"
     LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + WEIGHTS_FOLDER + '/')
     # LOG_DIR = os.path.join(os.getcwd(), 'logs/' + "clutter/" + model_name + '/')
-    VISUALIZE = False
+    VISUALIZE = True
     LABEL_TYPE = "modal"
     TARGET_TYPE = "amodal"
 
