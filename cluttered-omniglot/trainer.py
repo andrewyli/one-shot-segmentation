@@ -14,7 +14,7 @@ from skimage import io
 from tqdm import tqdm
 
 # Memory settings
-cpu_cores = [12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23] # Cores (numbered 0-11)
+cpu_cores = [0,1,2,3,4,5,6,7,8,9,10,11]
 os.system("taskset -pc {} {}".format(",".join(str(i) for i in cpu_cores), os.getpid()))
 
 slim = tf.contrib.slim
@@ -104,7 +104,11 @@ def load_train(fold_dir, index, label_type=None, target_type=None):
         tar_train = io.imread(os.path.join(path, '{}_target_{:08d}.png'.format(target_type, index)))
     else:
         tar_train = io.imread(os.path.join(path, 'target_{:08d}.png'.format(index)))
-
+    
+    mean = ims_train.mean()
+    std = np.std(ims_train)
+    ims_train = ims_train - mean
+    #ims_train = (ims_train - mean) / std
     return ims_train, seg_train, tar_train
 
 
@@ -132,6 +136,10 @@ def load_val(fold_dir, index, subset, label_type=None, target_type=None):
         tar_val = io.imread(
             os.path.join(path, 'target_{:08d}.png'.format(index)))
 
+    mean = ims_val.mean()
+    std = np.std(ims_val)
+    ims_val = ims_val - mean
+    #ims_val = (ims_val - mean) / std
     return ims_val, seg_val, tar_val
 
 
@@ -172,6 +180,10 @@ def load_test(fold_dir, index, subset, label_type=None, target_type=None):
         tar_test = io.imread(
             os.path.join(path, 'target_{:08d}.png'.format(index)))
 
+    mean = ims_test.mean()
+    std = np.std(ims_test)
+    ims_test = ims_test - mean
+    # ims_test = (ims_test - mean) / std
     return ims_test, seg_test, tar_test
 
 
@@ -367,19 +379,12 @@ def training(dataset_dir,
         active_frac /= 100
         print("Found active_frac to be {}.".format(active_frac))
 
-        mean = np.mean(np.array(sample_im_batch))
-        std = np.std(np.array(sample_im_batch))
-
         # generate tensorflow placeholders and variables
         images, labels, targets = get_training_placeholders(
             batch_size, im_block.shape[0], im_block.shape[1],
             tar_block.shape[0], tar_block.shape[1]
         )
         learn_rate = tf.Variable(learning_rate)
-
-        # preprocess images
-        targets = (targets - mean) / std
-        images = (images - mean) / std
 
         # call desired network to get segmentations
         segmentations = model.generate_segmentations(
@@ -399,7 +404,7 @@ def training(dataset_dir,
 
         #Training step
         optimizer = tf.compat.v1.train.AdamOptimizer(learn_rate)
-        optimizer = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(optimizer, loss_scale='dynamic')
+        # optimizer = tf.compat.v1.train.experimental.enable_mixed_precision_graph_rewrite(optimizer, loss_scale='dynamic')
         global_step = tf.Variable(0, name = 'global_step', trainable = False)
         train_op = optimizer.minimize(loss, global_step=global_step)
 
@@ -605,7 +610,7 @@ def evaluation(dataset_dir,
     model = get_model(model_name, "eval", 0.0, dropout)
     with tf.Graph().as_default():
         # define logging parameters
-        EVAL_CKPT_FILE = log_dir + 'Run_Epoch11_Step0.ckpt'# 'Run_Epoch11_Step0.ckpt'
+        EVAL_CKPT_FILE = os.path.join(log_dir, 'Run.ckpt')# 'Run_Epoch11_Step0.ckpt'
         perms = np.random.permutation(test_size)
 
         # define training parameters
@@ -629,9 +634,6 @@ def evaluation(dataset_dir,
             im_block, _, tar_block = sample
             sample_im_batch.append(im_block)
 
-        mean = np.mean(np.array(sample_im_batch))
-        std = np.std(np.array(sample_im_batch))
-
         # generate tensorflow placeholders and variables
         im_block = np.zeros((1, 384, 384, 1))
         tar_block = np.zeros((1, 128, 128, 1))
@@ -639,10 +641,6 @@ def evaluation(dataset_dir,
             batch_size, im_block.shape[1], im_block.shape[2],
             tar_block.shape[1], tar_block.shape[2]
         )
-
-        # preprocess images
-        targets = (targets - mean)/std
-        images = (images - mean)/std
 
         # run network and produce segmentations
         segmentations = model.generate_segmentations(

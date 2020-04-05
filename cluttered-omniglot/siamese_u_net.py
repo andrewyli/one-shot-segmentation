@@ -161,7 +161,7 @@ class SiameseUNet(Model):
                                                     tf.expand_dims(inputs[1], 3),  # H,W,C -> H,W,C,1
                                                     strides=[1,1,1,1], padding="SAME") # Result of conv is 1,H,W,1
 
-        crosscorrelation = tf.map_fn(conv2ims, elems=[sample, target], dtype=tf.float32, name='crosscorrelation_1')
+        crosscorrelation = tf.map_fn(conv2ims, elems=[sample, target],dtype=tf.float32, name='crosscorrelation_1')
 
         return crosscorrelation[:, 0, :, :, :] # B,1,H,W,C -> B,H,W,C
 
